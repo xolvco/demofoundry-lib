@@ -18,6 +18,16 @@ from ..models import ActionRecord, ActionType, Rect, Step
 
 VIEWPORT = {"width": 1920, "height": 1080}
 
+# For each action, the field it needs to do anything. If that field is empty the
+# step matches no branch below and silently no-ops — we mark it "skipped" with
+# this name so the review UI can explain why.
+_REQUIRED_FIELD = {
+    ActionType.NAVIGATE: "value (url)",
+    ActionType.CLICK: "target (selector)",
+    ActionType.TYPE: "target (selector)",
+    ActionType.KEYPRESS: "value (key)",
+}
+
 
 async def _rect(locator) -> Rect | None:
     try:
@@ -59,6 +69,8 @@ async def capture(
             started = time.monotonic() - clock0
             click_xy = None
             target_rect = None
+            status = "ok"
+            error: str | None = None
 
             try:
                 if step.action is ActionType.NAVIGATE and step.value:
@@ -80,11 +92,19 @@ async def capture(
                     await page.keyboard.press(step.value)
                 elif step.action is ActionType.WAIT:
                     await page.wait_for_timeout(float(step.value or 1000))
+                else:
+                    # No branch matched: the action's required field was empty,
+                    # so nothing ran. Flag it rather than letting it pass silently.
+                    status = "skipped"
+                    missing = _REQUIRED_FIELD.get(step.action, "input")
+                    error = f"missing {missing} — nothing to do"
 
                 # Let the React app settle so the recorded frame is stable.
                 await page.wait_for_load_state("networkidle")
-            except Exception as exc:  # surface which step failed; keep going
-                print(f"[capture] step {step.id} ({step.action}) failed: {exc}")
+            except Exception as exc:  # the action raised (e.g. selector matched nothing)
+                status = "failed"
+                error = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__
+                print(f"[capture] step {step.id} ({step.action.value}) failed: {error}")
 
             ended = time.monotonic() - clock0
 
@@ -103,6 +123,8 @@ async def capture(
                 target_rect=target_rect,
                 zoom_rect=zoom_rect,
                 highlight_rect=highlight_rect,
+                status=status,
+                error=error,
             )
 
         await context.close()  # finalizes the video file

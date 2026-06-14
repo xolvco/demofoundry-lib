@@ -85,6 +85,8 @@ def record_to_dict(r: ActionRecord) -> dict:
         "target_rect": _rect_to(r.target_rect),
         "zoom_rect": _rect_to(r.zoom_rect),
         "highlight_rect": _rect_to(r.highlight_rect),
+        "status": r.status,
+        "error": r.error,
     }
 
 
@@ -98,6 +100,8 @@ def record_from_dict(d: dict) -> ActionRecord:
         target_rect=_rect_from(d.get("target_rect")),
         zoom_rect=_rect_from(d.get("zoom_rect")),
         highlight_rect=_rect_from(d.get("highlight_rect")),
+        status=d.get("status", "ok"),
+        error=d.get("error"),
     )
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import store
-from .models import Step
+from .models import ActionRecord, Step
 from .pipeline import capture, compose, sync, tts
 
 
@@ -24,8 +24,14 @@ async def render_to_files(
     out_dir: Path,
     voice_id: str = "default",
     on_status: Callable[[str], None] | None = None,
+    on_records: Callable[[dict[str, ActionRecord]], None] | None = None,
 ) -> tuple[Path, Path]:
-    """Run the whole pipeline to disk. Returns (video_path, srt_path)."""
+    """Run the whole pipeline to disk. Returns (video_path, srt_path).
+
+    `on_records`, if given, is called with the capture records as soon as the
+    capture stage finishes — so callers can persist which steps fired/failed
+    before the (slower) narration + compose stages run.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -35,6 +41,8 @@ async def render_to_files(
 
     status("capturing")
     video, records = await capture.capture(target_url, steps, out_dir / "capture")
+    if on_records:
+        on_records(records)
 
     status("narrating")
     durations: dict[str, float] = {}
@@ -59,14 +67,31 @@ async def run(pid: str) -> None:
     if not project:
         return
     steps = store.get_steps(pid)
+
+    def save_results(records: dict[str, ActionRecord]) -> None:
+        # Compact per-step outcome for the review UI: did each step fire?
+        store.set_step_results(
+            pid,
+            {
+                r.step_id: {
+                    "status": r.status,
+                    "error": r.error,
+                    "duration": round(r.duration, 2),
+                }
+                for r in records.values()
+            },
+        )
+
     try:
         store.update(pid, status="capturing", error=None)
+        store.set_step_results(pid, {})  # clear any prior run's results
         video, srt = await render_to_files(
             project["target_url"],
             steps,
             store.asset_dir(pid),
             project.get("voice_id") or "default",
             on_status=lambda s: store.update(pid, status=s),
+            on_records=save_results,
         )
         store.update(pid, status="done", video_path=str(video), srt_path=str(srt))
     except Exception as exc:  # surface failures to the UI

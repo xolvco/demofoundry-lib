@@ -39,9 +39,14 @@ def init() -> None:
                 status TEXT DEFAULT 'new',
                 error TEXT,
                 video_path TEXT,
-                srt_path TEXT
+                srt_path TEXT,
+                step_results_json TEXT
             )"""
         )
+        # Migrate older DBs that predate the per-step capture results column.
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(projects)")}
+        if "step_results_json" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN step_results_json TEXT")
 
 
 def create(project: dict) -> None:
@@ -80,7 +85,19 @@ def get(pid: str) -> dict | None:
         return None
     d = dict(row)
     d["steps"] = json.loads(d.pop("steps_json") or "[]")
+    # Per-step capture outcomes ({step_id: {status, error, duration}}), written
+    # after the capture stage. Empty until a render has run.
+    d["step_results"] = json.loads(d.pop("step_results_json", None) or "{}")
     return d
+
+
+def set_step_results(pid: str, results: dict) -> None:
+    """Persist the per-step capture outcomes for the review UI."""
+    with _conn() as c:
+        c.execute(
+            "UPDATE projects SET step_results_json=? WHERE id=?",
+            (json.dumps(results), pid),
+        )
 
 
 def get_steps(pid: str) -> list[Step]:

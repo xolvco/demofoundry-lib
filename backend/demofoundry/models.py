@@ -60,6 +60,12 @@ class ActionRecord:
     target_rect: Optional[Rect] = None
     zoom_rect: Optional[Rect] = None
     highlight_rect: Optional[Rect] = None
+    # Did the action actually run? "ok" = fired; "skipped" = no matching branch
+    # (a required selector/value was missing); "failed" = the action raised
+    # (e.g. the selector matched nothing). `error` carries the reason for the
+    # latter two so the review UI can show which steps silently no-op'd.
+    status: str = "ok"
+    error: Optional[str] = None
 
     @property
     def duration(self) -> float:

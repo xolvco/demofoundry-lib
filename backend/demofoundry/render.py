@@ -32,6 +32,12 @@ async def render_to_files(
     capture stage finishes — so callers can persist which steps fired/failed
     before the (slower) narration + compose stages run.
     """
+    if not steps:
+        # An empty step list yields an empty RenderPlan and an empty ffmpeg
+        # concat list, which crashes the muxer with an opaque error. Fail early
+        # with something a human can act on.
+        raise RuntimeError("This demo has no scenes — add at least one step before rendering.")
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

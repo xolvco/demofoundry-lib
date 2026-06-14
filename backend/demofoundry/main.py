@@ -123,6 +123,8 @@ async def render_project(pid: str) -> dict:
     p = store.get(pid)
     if not p:
         raise HTTPException(404, "project not found")
+    if not p.get("steps"):
+        raise HTTPException(400, "This demo has no scenes — add at least one before generating.")
     store.update(pid, status="queued")
     asyncio.create_task(render.run(pid))  # fire-and-forget; poll status
     return {"status": "queued"}

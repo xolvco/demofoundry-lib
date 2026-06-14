@@ -58,6 +58,21 @@ def create(project: dict) -> None:
         )
 
 
+def list_all() -> list[dict]:
+    """Project summaries for the Library list, newest first."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, name, target_url, status, error, steps_json "
+            "FROM projects ORDER BY rowid DESC"
+        ).fetchall()
+    summaries = []
+    for row in rows:
+        d = dict(row)
+        d["step_count"] = len(json.loads(d.pop("steps_json") or "[]"))
+        summaries.append(d)
+    return summaries
+
+
 def get(pid: str) -> dict | None:
     with _conn() as c:
         row = c.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()

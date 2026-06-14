@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -19,6 +20,16 @@ from .pipeline import scripting as scripting_api
 
 app = FastAPI(title="DemoFoundry", version="0.1.0")
 STATIC = Path(__file__).resolve().parent / "static"
+
+# In production the React static export is served from STATIC (same origin, no
+# CORS needed). This allows the Next dev server (localhost:3000) to call the API
+# directly during development.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -75,6 +86,12 @@ def create_project(body: ProjectIn) -> dict:
         }
     )
     return {"id": pid}
+
+
+@app.get("/api/projects")
+def list_projects() -> list[dict]:
+    """Project summaries for the Library list."""
+    return store.list_all()
 
 
 @app.get("/api/projects/{pid}")

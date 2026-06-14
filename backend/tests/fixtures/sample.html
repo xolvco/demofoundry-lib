@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Sample App — capture fixture</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 3rem; }
+    button { padding: .6rem 1.2rem; font-size: 1rem; }
+    input { padding: .5rem; font-size: 1rem; width: 16rem; display: block; margin: 1rem 0; }
+    #summary { margin-top: 2rem; padding: 1rem; border: 2px solid #3f51b5; border-radius: 8px; width: 18rem; }
+  </style>
+</head>
+<body>
+  <!-- A deterministic static page so the capture path has a repeatable target
+       with no network, no app dependency. Elements match the smoke-test steps. -->
+  <h1>Sample App</h1>
+  <button data-testid="start" onclick="document.getElementById('form').style.display='block'">
+    Get started
+  </button>
+
+  <div id="form" style="display:none">
+    <input id="email" placeholder="you@example.com" />
+    <button onclick="document.getElementById('summary').textContent='Order confirmed.'">
+      Continue
+    </button>
+  </div>
+
+  <div id="summary">Your order summary appears here.</div>
+</body>
+</html>

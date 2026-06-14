@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DemoFoundry</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+    h1 { margin-bottom: 0; }
+    .sub { color: #666; margin-top: .25rem; }
+    label { display: block; font-weight: 600; margin: .8rem 0 .2rem; }
+    input, textarea { width: 100%; padding: .5rem; border: 1px solid #ccc; border-radius: 6px; font: inherit; box-sizing: border-box; }
+    textarea { min-height: 120px; font-family: ui-monospace, monospace; }
+    button { margin-top: 1rem; padding: .6rem 1.2rem; border: 0; border-radius: 6px; background: #3f51b5; color: #fff; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #555; }
+    #status { margin-top: 1rem; padding: .6rem .8rem; background: #f3f4ff; border-radius: 6px; white-space: pre-wrap; }
+    video { width: 100%; margin-top: 1rem; border-radius: 8px; }
+    .row { display: flex; gap: .8rem; }
+  </style>
+</head>
+<body>
+  <h1>DemoFoundry</h1>
+  <p class="sub">Local web app — point it at your React app on localhost and build a narrated demo.</p>
+
+  <label>Project name</label>
+  <input id="name" placeholder="Checkout demo" />
+
+  <label>Target URL (your app)</label>
+  <input id="url" placeholder="http://localhost:3000" />
+
+  <label>What are you demoing? (Claude uses this to write narration)</label>
+  <textarea id="desc" placeholder="A quick tour of the new checkout flow…"></textarea>
+
+  <label>Steps (JSON array)</label>
+  <textarea id="steps">[
+  { "action": "click", "target": "[data-testid='start']" },
+  { "action": "type", "target": "#email", "value": "demo@acme.com" },
+  { "action": "click", "target": "text=Continue", "zoom_target": "#summary" }
+]</textarea>
+
+  <div class="row">
+    <button onclick="createProject()">Create project</button>
+    <button class="secondary" onclick="writeScript()">Write narration (Claude)</button>
+    <button onclick="render()">Render</button>
+  </div>
+
+  <div id="status">No project yet.</div>
+  <div id="out"></div>
+
+  <script>
+    let pid = null;
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (t) => ($("status").textContent = t);
+
+    async function createProject() {
+      const body = {
+        name: $("name").value,
+        target_url: $("url").value,
+        description: $("desc").value,
+        steps: JSON.parse($("steps").value || "[]"),
+      };
+      const r = await fetch("/api/projects", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      pid = d.id;
+      setStatus("Project created: " + pid);
+    }
+
+    async function writeScript() {
+      if (!pid) return setStatus("Create a project first.");
+      setStatus("Asking Claude to write narration…");
+      const r = await fetch(`/api/projects/${pid}/script`, { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) return setStatus("Scripting error: " + (d.detail || ""));
+      $("steps").value = JSON.stringify(d.steps, null, 2);
+      setStatus("Narration written. Review the steps above, then render.");
+    }
+
+    async function render() {
+      if (!pid) return setStatus("Create a project first.");
+      await fetch(`/api/projects/${pid}/render`, { method: "POST" });
+      poll();
+    }
+
+    async function poll() {
+      const r = await fetch(`/api/projects/${pid}`);
+      const d = await r.json();
+      setStatus("Status: " + d.status + (d.error ? "\n" + d.error : ""));
+      if (d.status === "done") {
+        $("out").innerHTML =
+          `<video controls src="/api/projects/${pid}/video"></video>
+           <p><a href="/api/projects/${pid}/srt">Download subtitles (.srt)</a></p>`;
+      } else if (d.status !== "error") {
+        setTimeout(poll, 1500);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Secrets / local config
+.env
+
+# Runtime workspace (projects, SQLite db, rendered assets)
+workspace/
+
+# MkDocs build output
+site/
+
+# Node (future React frontend)
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/

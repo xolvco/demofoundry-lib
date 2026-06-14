@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "demofoundry"
+version = "0.1.0"
+description = "Build narrated, localized software demo videos from a click-flow."
+requires-python = ">=3.10"
+# Core library is pure stdlib — heavy deps are optional extras so you can import
+# the sync/compose/serde core without installing Playwright, Anthropic, etc.
+dependencies = []
+
+[project.optional-dependencies]
+browser = ["playwright>=1.43"]   # capture
+ai = ["anthropic>=0.40"]          # scripting
+voice = ["httpx>=0.27"]           # ElevenLabs TTS
+web = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+all = [
+    "playwright>=1.43",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.scripts]
+demofoundry = "demofoundry.cli:main"
+
+[tool.setuptools]
+packages = ["demofoundry", "demofoundry.pipeline"]
+
+[tool.setuptools.package-data]
+demofoundry = ["static/*.html"]

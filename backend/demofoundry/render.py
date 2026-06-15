@@ -10,12 +10,26 @@ re-driving the browser.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Callable
 
 from . import store
 from .models import ActionRecord, Step
 from .pipeline import capture, compose, sync, tts
+
+
+def apply_pronunciations(text: str, catalog: dict[str, str] | None) -> str:
+    """Swap catalog terms for their spoken form (whole-word, case-insensitive).
+
+    Applied to the audio only — captions keep the original `narration_text`.
+    """
+    if not catalog:
+        return text
+    for term, spoken in catalog.items():
+        if term.strip():
+            text = re.sub(rf"\b{re.escape(term)}\b", spoken, text, flags=re.IGNORECASE)
+    return text
 
 
 async def render_to_files(
@@ -25,6 +39,7 @@ async def render_to_files(
     voice_id: str = "default",
     on_status: Callable[[str], None] | None = None,
     on_records: Callable[[dict[str, ActionRecord]], None] | None = None,
+    pronunciations: dict[str, str] | None = None,
 ) -> tuple[Path, Path]:
     """Run the whole pipeline to disk. Returns (video_path, srt_path).
 
@@ -54,8 +69,9 @@ async def render_to_files(
     durations: dict[str, float] = {}
     audio_paths: dict[str, str] = {}
     for step in steps:
+        spoken = apply_pronunciations(step.speech_text(), pronunciations)
         path, dur, _timings = tts.synth(
-            step.speech_text(), voice_id, out_dir / "audio" / step.id
+            spoken, voice_id, out_dir / "audio" / step.id
         )
         durations[step.id] = dur
         audio_paths[step.id] = str(path)
@@ -98,6 +114,7 @@ async def run(pid: str) -> None:
             project.get("voice_id") or "default",
             on_status=lambda s: store.update(pid, status=s),
             on_records=save_results,
+            pronunciations=project.get("pronunciations") or {},
         )
         store.update(pid, status="done", video_path=str(video), srt_path=str(srt))
     except Exception as exc:  # surface failures to the UI

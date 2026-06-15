@@ -40,25 +40,36 @@ def init() -> None:
                 error TEXT,
                 video_path TEXT,
                 srt_path TEXT,
-                step_results_json TEXT
+                step_results_json TEXT,
+                reference TEXT,
+                audio_script TEXT,
+                pronunciations TEXT
             )"""
         )
-        # Migrate older DBs that predate the per-step capture results column.
+        # Migrate older DBs that predate later columns.
         cols = {r["name"] for r in c.execute("PRAGMA table_info(projects)")}
         if "step_results_json" not in cols:
             c.execute("ALTER TABLE projects ADD COLUMN step_results_json TEXT")
+        if "reference" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN reference TEXT")
+        if "audio_script" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN audio_script TEXT")
+        if "pronunciations" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN pronunciations TEXT")
 
 
 def create(project: dict) -> None:
     with _conn() as c:
         c.execute(
             """INSERT INTO projects
-               (id, name, target_url, description, voice_id, steps_json, status)
-               VALUES (?,?,?,?,?,?, 'new')""",
+               (id, name, target_url, description, reference, audio_script, pronunciations, voice_id, steps_json, status)
+               VALUES (?,?,?,?,?,?,?,?,?, 'new')""",
             (
                 project["id"], project.get("name", ""), project["target_url"],
-                project.get("description", ""), project.get("voice_id", ""),
-                json.dumps(project.get("steps", [])),
+                project.get("description", ""), project.get("reference", ""),
+                project.get("audio_script", ""),
+                json.dumps(project.get("pronunciations", {})),
+                project.get("voice_id", ""), json.dumps(project.get("steps", [])),
             ),
         )
 
@@ -88,6 +99,9 @@ def get(pid: str) -> dict | None:
     # Per-step capture outcomes ({step_id: {status, error, duration}}), written
     # after the capture stage. Empty until a render has run.
     d["step_results"] = json.loads(d.pop("step_results_json", None) or "{}")
+    # Pronunciation catalog ({term: spoken}) — applied to the spoken audio only,
+    # the narration captions stay as written.
+    d["pronunciations"] = json.loads(d.get("pronunciations") or "{}")
     return d
 
 

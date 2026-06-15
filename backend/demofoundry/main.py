@@ -7,6 +7,7 @@ Open: http://localhost:8000
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from pathlib import Path
 
@@ -15,7 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from . import config, render, store
+from . import config, render, store, voices as voices_api
+from .pipeline import inspect as inspect_api
 from .pipeline import scripting as scripting_api
 
 app = FastAPI(title="DemoFoundry", version="0.1.0")
@@ -51,9 +53,27 @@ class StepIn(BaseModel):
 class ProjectIn(BaseModel):
     name: str = ""
     target_url: str
-    description: str = ""
+    description: str = ""  # the goal / mission of the demo
+    reference: str = ""  # optional docs/links about the app, for the builder
+    audio_script: str = ""  # optional narration the user already has
+    pronunciations: dict[str, str] = {}  # term -> spoken (applied to audio only)
     voice_id: str = ""
     steps: list[StepIn] = []
+
+
+class ProjectPatch(BaseModel):
+    """Partial update. Only the fields present are written — so the Edit screen
+    can save steps without touching the voice, and Voice can set the voice
+    without touching the steps."""
+
+    name: str | None = None
+    target_url: str | None = None
+    description: str | None = None
+    reference: str | None = None
+    audio_script: str | None = None
+    pronunciations: dict[str, str] | None = None
+    voice_id: str | None = None
+    steps: list[StepIn] | None = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -70,6 +90,12 @@ def health() -> dict:
     }
 
 
+@app.get("/api/voices")
+def list_voices() -> list[dict]:
+    """Narrator catalog for the Voice screen (with preview_url when available)."""
+    return voices_api.list_voices()
+
+
 @app.post("/api/projects")
 def create_project(body: ProjectIn) -> dict:
     pid = uuid.uuid4().hex[:12]
@@ -81,8 +107,9 @@ def create_project(body: ProjectIn) -> dict:
     store.create(
         {
             "id": pid, "name": body.name, "target_url": body.target_url,
-            "description": body.description, "voice_id": body.voice_id,
-            "steps": steps,
+            "description": body.description, "reference": body.reference,
+            "audio_script": body.audio_script, "pronunciations": body.pronunciations,
+            "voice_id": body.voice_id, "steps": steps,
         }
     )
     return {"id": pid}
@@ -100,6 +127,89 @@ def get_project(pid: str) -> dict:
     if not p:
         raise HTTPException(404, "project not found")
     return p
+
+
+@app.patch("/api/projects/{pid}")
+def patch_project(pid: str, body: ProjectPatch) -> dict:
+    """Save edits from the Script / Voice screens (partial update)."""
+    p = store.get(pid)
+    if not p:
+        raise HTTPException(404, "project not found")
+
+    if body.steps is not None:
+        steps = []
+        for i, s in enumerate(body.steps):
+            d = s.model_dump()
+            d["id"] = d.get("id") or f"s{i + 1}"
+            steps.append(d)
+        store.set_steps(pid, [store.step_from_dict(d) for d in steps])
+
+    scalars = {
+        k: v
+        for k, v in {
+            "name": body.name,
+            "target_url": body.target_url,
+            "description": body.description,
+            "reference": body.reference,
+            "audio_script": body.audio_script,
+            "voice_id": body.voice_id,
+        }.items()
+        if v is not None
+    }
+    if scalars:
+        store.update(pid, **scalars)
+    if body.pronunciations is not None:
+        store.update(pid, pronunciations=json.dumps(body.pronunciations))
+    return store.get(pid)
+
+
+class ScriptPromptIn(BaseModel):
+    inspect: bool = True          # snapshot the app's elements for selector context
+    audio_script: str = ""        # optional narration the user already has
+
+
+@app.post("/api/projects/{pid}/script-prompt")
+async def script_prompt(pid: str, body: ScriptPromptIn) -> dict:
+    """Assemble the builder prompt (optionally inspecting the app) and return it
+    verbatim so the UI can show/edit it before running Claude."""
+    p = store.get(pid)
+    if not p:
+        raise HTTPException(404, "project not found")
+    elements = await inspect_api.snapshot(p["target_url"]) if body.inspect else []
+    prompt = scripting_api.build_prompt(
+        p.get("description", ""),
+        p.get("reference", ""),
+        inspect_api.as_prompt_lines(elements),
+        body.audio_script or p.get("audio_script", ""),
+        p.get("steps", []),
+    )
+    return {
+        "prompt": prompt,
+        "system": scripting_api.BUILD_SYSTEM,
+        "element_count": len(elements),
+    }
+
+
+class BuildScriptIn(BaseModel):
+    prompt: str  # the (possibly edited) builder prompt to send to Claude
+
+
+@app.post("/api/projects/{pid}/build-script")
+def build_script(pid: str, body: BuildScriptIn) -> dict:
+    """Run Claude on the prompt, save the produced steps, return the project."""
+    p = store.get(pid)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        produced = scripting_api.build(body.prompt)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    steps = []
+    for i, d in enumerate(produced):
+        d["id"] = d.get("id") or f"s{i + 1}"
+        steps.append(store.step_from_dict(d))
+    store.set_steps(pid, steps)
+    return store.get(pid)
 
 
 @app.post("/api/projects/{pid}/script")

@@ -163,6 +163,14 @@ def patch_project(pid: str, body: ProjectPatch) -> dict:
     return store.get(pid)
 
 
+@app.delete("/api/projects/{pid}")
+def delete_project(pid: str) -> dict:
+    """Remove a project (and its rendered assets) from the Library."""
+    if not store.delete(pid):
+        raise HTTPException(404, "project not found")
+    return {"deleted": pid}
+
+
 class ScriptPromptIn(BaseModel):
     inspect: bool = True          # snapshot the app's elements for selector context
     audio_script: str = ""        # optional narration the user already has

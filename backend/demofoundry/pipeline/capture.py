@@ -18,6 +18,13 @@ from ..models import ActionRecord, ActionType, Rect, Step
 
 VIEWPORT = {"width": 1920, "height": 1080}
 
+# How long to wait on a single element before giving up. Playwright's default is
+# 30s, and a bad selector pays it twice (once locating, once acting) — ~60s of
+# dead air per typo while authoring. 5s is plenty for an element that exists and
+# fails fast for one that doesn't. Page-load/navigation waits keep their own
+# (longer) budget so genuinely slow apps still settle.
+ACTION_TIMEOUT_MS = 5000
+
 # For each action, the field it needs to do anything. If that field is empty the
 # step matches no branch below and silently no-ops — we mark it "skipped" with
 # this name so the review UI can explain why.
@@ -31,7 +38,7 @@ _REQUIRED_FIELD = {
 
 async def _rect(locator) -> Rect | None:
     try:
-        box = await locator.bounding_box()
+        box = await locator.bounding_box(timeout=ACTION_TIMEOUT_MS)
     except Exception:
         box = None
     if not box:
@@ -83,11 +90,11 @@ async def capture(
                             target_rect.x + target_rect.width / 2,
                             target_rect.y + target_rect.height / 2,
                         )
-                    await loc.click()
+                    await loc.click(timeout=ACTION_TIMEOUT_MS)
                 elif step.action is ActionType.TYPE and step.target:
                     loc = page.locator(step.target).first
                     target_rect = await _rect(loc)
-                    await loc.fill(step.value or "")
+                    await loc.fill(step.value or "", timeout=ACTION_TIMEOUT_MS)
                 elif step.action is ActionType.KEYPRESS and step.value:
                     await page.keyboard.press(step.value)
                 elif step.action is ActionType.WAIT:

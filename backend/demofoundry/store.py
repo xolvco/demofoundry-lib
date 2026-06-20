@@ -7,6 +7,7 @@ Single-user/local now; the schema is keyed so it becomes per-user without change
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 from pathlib import Path
 
@@ -133,6 +134,18 @@ def update(pid: str, **fields) -> None:
     cols = ", ".join(f"{k}=?" for k in fields)
     with _conn() as c:
         c.execute(f"UPDATE projects SET {cols} WHERE id=?", (*fields.values(), pid))
+
+
+def delete(pid: str) -> bool:
+    """Remove a project row and its rendered assets. Returns False if unknown."""
+    with _conn() as c:
+        cur = c.execute("DELETE FROM projects WHERE id=?", (pid,))
+        if cur.rowcount == 0:
+            return False
+    assets = config.WORKSPACE / pid
+    if assets.exists():
+        shutil.rmtree(assets, ignore_errors=True)
+    return True
 
 
 def asset_dir(pid: str) -> Path:

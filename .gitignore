@@ -14,6 +14,10 @@ venv/
 # Runtime workspace (projects, SQLite db, rendered assets)
 workspace/
 
+# Ad-hoc CLI scratch output (the `demofoundry … --out-dir work` convention)
+work/
+work_*/
+
 # MkDocs build output
 site/
 

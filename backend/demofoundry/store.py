@@ -44,7 +44,8 @@ def init() -> None:
                 step_results_json TEXT,
                 reference TEXT,
                 audio_script TEXT,
-                pronunciations TEXT
+                pronunciations TEXT,
+                progress TEXT
             )"""
         )
         # Migrate older DBs that predate later columns.
@@ -57,6 +58,8 @@ def init() -> None:
             c.execute("ALTER TABLE projects ADD COLUMN audio_script TEXT")
         if "pronunciations" not in cols:
             c.execute("ALTER TABLE projects ADD COLUMN pronunciations TEXT")
+        if "progress" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN progress TEXT")
 
 
 def create(project: dict) -> None:

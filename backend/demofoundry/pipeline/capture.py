@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Callable
 
 from ..models import ActionRecord, ActionType, Rect, Step
 
@@ -50,10 +51,12 @@ async def capture(
     target_url: str,
     steps: list[Step],
     out_dir: Path,
+    on_step: Callable[[int, int, Step], None] | None = None,
 ) -> tuple[Path, dict[str, ActionRecord]]:
     """Run the steps against `target_url`, recording video + timestamps.
 
-    Returns (video_path, {step_id: ActionRecord}).
+    `on_step(i, total, step)` is called as each scene starts (1-based) so callers
+    can report live capture progress. Returns (video_path, {step_id: ActionRecord}).
     """
     from playwright.async_api import async_playwright
 
@@ -72,7 +75,10 @@ async def capture(
 
         clock0 = time.monotonic()  # recording starts ~now
 
-        for step in steps:
+        total = len(steps)
+        for idx, step in enumerate(steps, start=1):
+            if on_step:
+                on_step(idx, total, step)
             started = time.monotonic() - clock0
             click_xy = None
             target_rect = None

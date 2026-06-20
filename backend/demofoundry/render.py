@@ -10,6 +10,7 @@ re-driving the browser.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 from typing import Callable
@@ -39,10 +40,14 @@ async def render_to_files(
     voice_id: str = "default",
     on_status: Callable[[str], None] | None = None,
     on_records: Callable[[dict[str, ActionRecord]], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
     pronunciations: dict[str, str] | None = None,
 ) -> tuple[Path, Path]:
     """Run the whole pipeline to disk. Returns (video_path, srt_path).
 
+    `on_status` reports the coarse stage (capturing/narrating/composing).
+    `on_progress`, if given, reports a human sub-message per scene ("Recording
+    scene 3 of 7") so a UI can show the pipeline is alive between stage changes.
     `on_records`, if given, is called with the capture records as soon as the
     capture stage finishes — so callers can persist which steps fired/failed
     before the (slower) narration + compose stages run.
@@ -55,31 +60,51 @@ async def render_to_files(
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    total = len(steps)
 
     def status(s: str) -> None:
         if on_status:
             on_status(s)
 
+    def progress(msg: str) -> None:
+        if on_progress:
+            on_progress(msg)
+
     status("capturing")
-    video, records = await capture.capture(target_url, steps, out_dir / "capture")
+
+    def on_capture_step(i: int, n: int, step: Step) -> None:
+        progress(f"Recording scene {i} of {n}")
+
+    video, records = await capture.capture(
+        target_url, steps, out_dir / "capture", on_step=on_capture_step
+    )
     if on_records:
         on_records(records)
 
     status("narrating")
     durations: dict[str, float] = {}
     audio_paths: dict[str, str] = {}
-    for step in steps:
+    for i, step in enumerate(steps, start=1):
+        progress(f"Narrating scene {i} of {total}")
         spoken = apply_pronunciations(step.speech_text(), pronunciations)
-        path, dur, _timings = tts.synth(
-            spoken, voice_id, out_dir / "audio" / step.id
+        # tts.synth is a blocking network/file call — run it off the event loop so
+        # the web server stays responsive (status/progress stay pollable live).
+        path, dur, _timings = await asyncio.to_thread(
+            tts.synth, spoken, voice_id, out_dir / "audio" / step.id
         )
         durations[step.id] = dur
         audio_paths[step.id] = str(path)
 
     status("composing")
+    progress("Composing video + captions")
     plan = sync.build_plan(steps, records, durations, audio_paths)
-    video_out = compose.render(plan, video, records, out_dir / "render")
-    srt_out = compose.write_srt(steps, plan, out_dir / "render" / "demo.srt")
+    # ffmpeg compose is the longest blocking call — also off-loop.
+    video_out = await asyncio.to_thread(
+        compose.render, plan, video, records, out_dir / "render"
+    )
+    srt_out = await asyncio.to_thread(
+        compose.write_srt, steps, plan, out_dir / "render" / "demo.srt"
+    )
     return video_out, srt_out
 
 
@@ -105,18 +130,20 @@ async def run(pid: str) -> None:
         )
 
     try:
-        store.update(pid, status="capturing", error=None)
+        store.update(pid, status="capturing", error=None, progress="")
         store.set_step_results(pid, {})  # clear any prior run's results
         video, srt = await render_to_files(
             project["target_url"],
             steps,
             store.asset_dir(pid),
             project.get("voice_id") or "default",
-            on_status=lambda s: store.update(pid, status=s),
+            # New stage clears the per-scene sub-message so it never shows stale.
+            on_status=lambda s: store.update(pid, status=s, progress=""),
             on_records=save_results,
+            on_progress=lambda m: store.update(pid, progress=m),
             pronunciations=project.get("pronunciations") or {},
         )
-        store.update(pid, status="done", video_path=str(video), srt_path=str(srt))
+        store.update(pid, status="done", video_path=str(video), srt_path=str(srt), progress="")
     except Exception as exc:  # surface failures to the UI
         store.update(pid, status="error", error=str(exc))
         raise

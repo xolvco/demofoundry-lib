@@ -14,6 +14,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urljoin
 
 from ..models import ActionRecord, ActionType, Rect, Step
 
@@ -87,7 +88,11 @@ async def capture(
 
             try:
                 if step.action is ActionType.NAVIGATE and step.value:
-                    await page.goto(step.value, wait_until="networkidle")
+                    # Resolve relative paths ("/dashboard") against the current
+                    # page so authored steps don't need the full origin. Absolute
+                    # URLs pass through urljoin unchanged.
+                    dest = urljoin(page.url, step.value)
+                    await page.goto(dest, wait_until="networkidle")
                 elif step.action is ActionType.CLICK and step.target:
                     loc = page.locator(step.target).first
                     target_rect = await _rect(loc)

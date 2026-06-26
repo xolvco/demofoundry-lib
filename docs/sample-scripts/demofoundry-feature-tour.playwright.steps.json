@@ -1,7 +1,7 @@
 {
-  "name": "DemoFoundry — Feature tour (with Voice screen)",
+  "name": "DemoFoundry — Feature tour",
   "target_url": "http://localhost:3000",
-  "description": "The self-demo, extended to walk into the Voice screen and show cloning your own voice, the read-aloud sample popup, and the pacing sliders.",
+  "description": "The full flagship tour: the New-demo flow, the Voice screen (cloning your own voice, the read-aloud popup, the pacing sliders), and the polished finished output. One target per scene (highlight only, no tight zooms). The Voice screen needs a project (__PROJECT_ID__) and the finish needs a rendered project (__DONE_PROJECT_ID__) — see the sample-scripts README.",
   "steps": [
     {
       "action": "navigate",
@@ -16,7 +16,6 @@
     {
       "action": "click",
       "target": "button:has-text(\"Web app\")",
-      "zoom_target": "text=How will you capture this?",
       "highlight_target": "button:has-text(\"Web app\")",
       "narration_text": "First you pick how to capture. A web app gets driven automatically in a browser. A desktop app you record yourself. We're demoing a web app."
     },
@@ -30,14 +29,12 @@
       "action": "type",
       "target": "#target",
       "value": "http://localhost:3000",
-      "zoom_target": "#target",
       "highlight_target": "#target",
       "narration_text": "Then you point it at the app you want to demo — usually your own app on localhost."
     },
     {
       "action": "click",
       "target": "text=Reset to sample",
-      "zoom_target": "text=What we read",
       "highlight_target": "text=What we read",
       "narration_text": "You drop in a script — an ordered list of actions and the words to narrate — and DemoFoundry reads it back live, showing every scene it understood."
     },
@@ -65,9 +62,14 @@
       "narration_text": "And two sliders set the pace: how quickly the narration speaks, and how long each new screen holds before the voice begins — so nothing ever feels rushed."
     },
     {
+      "action": "navigate",
+      "value": "/generate?id=__DONE_PROJECT_ID__",
+      "narration_text": "Then you hit render, and this is the finished result: a polished, captioned MP4, ready to download or play right here — narrated in the voice you chose, paced exactly how you set it."
+    },
+    {
       "action": "wait",
-      "value": "800",
-      "narration_text": "Pick a voice, set the pace, and render. DemoFoundry narrates each scene, syncs the video to the audio, and ships a captioned MP4 — in any voice you like, even your own."
+      "value": "1500",
+      "narration_text": "That's the whole loop. Point DemoFoundry at your app, give it a script, choose a voice, and ship a demo that looks like you spent days on it — in minutes."
     }
   ]
 }

@@ -42,5 +42,5 @@ CLAUDE_MODEL = os.environ.get("DEMOFOUNDRY_CLAUDE_MODEL", "claude-opus-4-8")
 #                   The provider clamps to 0.7–1.2, so we do too.
 #   SCENE_LEAD_MS — silent hold of each scene's first frame before the voice
 #                   starts, giving the viewer a beat to register a new screen.
-VOICE_SPEED = float(os.environ.get("DEMOFOUNDRY_VOICE_SPEED", "0.9"))
+VOICE_SPEED = float(os.environ.get("DEMOFOUNDRY_VOICE_SPEED", "0.85"))
 SCENE_LEAD_MS = int(os.environ.get("DEMOFOUNDRY_SCENE_LEAD_MS", "600"))

@@ -109,22 +109,32 @@ Output lands in `backend/work-demo/render/`: `demo.mp4` and `demo.srt`.
     (or just rely on the backend's own `.env` loader when running through the app). The Bash form
     above works in Git Bash / WSL.
 
-### The feature tour (with the Voice screen)
+### The feature tour (Voice screen + polished finish)
 
-`demofoundry-feature-tour.playwright.steps.json` extends the self-demo with a walk through the
-**Voice** screen — cloning your own voice, the read-aloud popup, and the pacing sliders. The Voice
-screen lives at `/voice?id=<project>`, so the script has a `__PROJECT_ID__` placeholder you fill in
-with a real project. Create one and substitute it:
+`demofoundry-feature-tour.playwright.steps.json` is the full flagship tour: the New-demo flow, the
+**Voice** screen (cloning your own voice, the read-aloud popup, the pacing sliders), and the
+**finished output** page. Two of those screens need a real project, so the script has two
+placeholders:
+
+- `__PROJECT_ID__` — any project, to land the **Voice** screen (`/voice?id=…`).
+- `__DONE_PROJECT_ID__` — a **already-rendered** project, to show the polished finish
+  (`/generate?id=…`, the output player + downloads).
+
+Create one project, pick a rendered one, substitute both, then render:
 
 ```bash
-# create a throwaway project to land the Voice screen on
+# a project to land the Voice screen on
 PID=$(curl -s -X POST http://localhost:8001/api/projects \
   -H 'Content-Type: application/json' \
   -d '{"name":"Feature tour","target_url":"http://localhost:3000"}' \
   | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
 
-# substitute it into a working copy, then render
-sed "s/__PROJECT_ID__/$PID/g" \
+# a project whose status is "done" (has a finished video) for the finish screen
+DONE=$(curl -s http://localhost:8001/api/projects \
+  | python -c "import sys,json;print(next(p['id'] for p in json.load(sys.stdin) if p['status']=='done'))")
+
+# substitute both into a working copy, then render
+sed -e "s/__PROJECT_ID__/$PID/g" -e "s/__DONE_PROJECT_ID__/$DONE/g" \
   ../docs/sample-scripts/demofoundry-feature-tour.playwright.steps.json > /tmp/feature-tour.json
 
 demofoundry render --url http://localhost:3000 --steps /tmp/feature-tour.json \
@@ -132,7 +142,8 @@ demofoundry render --url http://localhost:3000 --steps /tmp/feature-tour.json \
 ```
 
 The capture scrolls each highlighted area into view, so the pacing sliders (which sit below the voice
-grid) show up even though they start below the fold.
+grid) show up even though they start below the fold. Every scene uses **one** target (highlight only,
+no tight zooms), so nothing pixelates and no box is left stranded over the wrong place.
 
 ## Running a screen-capture script
 

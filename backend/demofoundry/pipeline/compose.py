@@ -53,20 +53,42 @@ def _video_filter(seg: Segment, rec_rects) -> str:
     f = ["scale=%d:%d" % (VW, VH), "setpts=PTS-STARTPTS"]
     if seg.op in (SegmentOp.SPEED, SegmentOp.TRIM) and seg.speed != 1.0:
         f.append("setpts=PTS/%.4f" % seg.speed)
+
+    # When a scene zooms, the frame is cropped to a window then rescaled to full
+    # size. The highlight box and click marker are captured in ORIGINAL frame
+    # coordinates, so after a zoom they must be mapped through the same
+    # crop+rescale — otherwise the box floats over the wrong place (or off the
+    # zoomed view entirely). `pt`/`dim` do that mapping; identity when no zoom.
     zoom = rec_rects.get("zoom")
     if zoom:
         w, h, x, y = _zoom_crop(zoom)
         f.append("crop=%d:%d:%d:%d" % (w, h, x, y))
         f.append("scale=%d:%d" % (VW, VH))
+        sx, sy = VW / w, VH / h
+
+        def pt(px, py):
+            return (px - x) * sx, (py - y) * sy
+
+        def dim(dw, dh):
+            return dw * sx, dh * sy
+    else:
+        def pt(px, py):
+            return px, py
+
+        def dim(dw, dh):
+            return dw, dh
+
     hl = rec_rects.get("highlight")
     if hl:
+        hx, hy = pt(hl.x, hl.y)
+        hw, hh = dim(hl.width, hl.height)
         f.append(
             "drawbox=x=%d:y=%d:w=%d:h=%d:color=yellow@0.9:t=5"
-            % (int(hl.x), int(hl.y), int(hl.width), int(hl.height))
+            % (int(hx), int(hy), int(hw), int(hh))
         )
     click = rec_rects.get("click")
     if click:
-        cx, cy = click
+        cx, cy = pt(click[0], click[1])
         f.append(
             "drawbox=x=%d:y=%d:w=28:h=28:color=red@0.6:t=fill"
             % (int(cx) - 14, int(cy) - 14)

@@ -1,7 +1,7 @@
 {
   "name": "DemoFoundry — Self demo (Playwright)",
   "target_url": "http://localhost:3000",
-  "description": "A fully click-driven tour of DemoFoundry's own web UI. Every step has a real Playwright selector against the app on localhost:3000, so the capture path can drive the whole New-demo flow hands-free. Run with the web capture mode (demofoundry render --url http://localhost:3000 --steps this-file).",
+  "description": "A fully click-driven tour of DemoFoundry's own web UI. Every step has a real Playwright selector against the app on localhost:3000, so the capture path can drive the whole New-demo flow hands-free. One target per scene (highlight only) — no tight zooms. Run with: demofoundry render --url http://localhost:3000 --steps this-file.",
   "steps": [
     {
       "action": "navigate",
@@ -16,7 +16,6 @@
     {
       "action": "click",
       "target": "button:has-text(\"Web app\")",
-      "zoom_target": "text=How will you capture this?",
       "highlight_target": "button:has-text(\"Web app\")",
       "narration_text": "First you pick how to capture. A web app gets driven automatically in a browser — that's this path. A desktop app you record yourself. We're demoing a web app."
     },
@@ -30,7 +29,6 @@
       "action": "type",
       "target": "#target",
       "value": "http://localhost:3000",
-      "zoom_target": "#target",
       "highlight_target": "#target",
       "narration_text": "Then you point it at the running app you want to demo — usually your own app on localhost. Stable test IDs make capture most reliable."
     },
@@ -48,14 +46,13 @@
       "action": "type",
       "target": "#goal",
       "value": "A quick tour of the invoicing flow — open a new invoice, add a customer and line items, apply a discount, and send it.",
-      "zoom_target": "#goal",
+      "highlight_target": "#goal",
       "narration_text": "You can also describe what you're demoing in plain English, and let Claude write any narration your steps don't already include."
     },
     {
       "action": "wait",
       "value": "1200",
       "target": "text=What we read",
-      "zoom_target": "text=What we read",
       "highlight_target": "text=What we read",
       "narration_text": "All the while, the What we read panel parses your script live — every scene, the action it'll take, and where it'll zoom or highlight."
     },

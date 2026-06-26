@@ -148,16 +148,20 @@ Follow these rules exactly:
 3. Never click Back, Cancel, or Close in a scene that describes where you're going — that returns to a
    previous screen and the footage won't match the words. To end, hold on the current screen with a
    `wait` and describe the next steps as what comes next.
-4. For emphasis prefer highlight_target — it keeps the whole screen visible. Use zoom_target ONLY for
-   detail too small to read, and always point it at a CONTAINING panel / card / section, never a bare
-   button or single line of text (tight zooms pixelate and lose context). At most one of
-   highlight_target / zoom_target per scene.
+4. NEVER set both zoom_target and highlight_target on the same scene — they fight, and the highlight
+   box lands in the wrong place. Pick ONE per scene. Default to highlight_target (it keeps the whole
+   screen visible). Reach for zoom_target only when a detail is too small to read, and then point it
+   at a CONTAINING panel / card / section, never a bare button or single line of text (tight zooms
+   pixelate and strip away context).
 5. Only set highlight_target / zoom_target to an element that is still on the screen the scene settles
    on. Never highlight something that moves, disappears, or that you navigate away from — the box will
    hover over empty space and look like an error. Usually: highlight the element you just acted on.
 6. Prefer stable selectors: text=…, role=…, or data-testid. One element each.
 7. Keep each narration line about as long as the action is worth showing; linger where there's
-   something to see, and write in a warm, plain, spoken voice.
+   something to see, and write in a warm, plain, spoken voice. The render already slows speech and
+   pauses on each new screen, so write naturally — don't cram.
+8. Show the payoff. End by reaching the screen that proves the result (the finished output, the saved
+   record, the success state) rather than describing it from afar — e.g. navigate to the done view.
 
 Write [N] scenes that accomplish the goal.
 ```
@@ -165,7 +169,8 @@ Write [N] scenes that accomplish the goal.
 !!! tip "Why this prompt works"
     Rules 1–3 keep narration and footage in sync (no "talking about the Voice screen while showing the
     Library"). Rules 4–5 stop the two visual glitches — pixelated over-zooms and highlight boxes
-    stranded over content that's gone. The DemoFoundry feature-tour and self-demo samples were written
+    stranded over content that's gone (the box-floats-when-zoomed case). Rule 8 makes the demo end on
+    the result instead of trailing off. The DemoFoundry feature-tour and self-demo samples were written
     with exactly this prompt.
 
 See also the [sample scripts](../sample-scripts/README.md) (working, copy-ready examples) and the

@@ -69,14 +69,15 @@ def create(project: dict) -> None:
     with _conn() as c:
         c.execute(
             """INSERT INTO projects
-               (id, name, target_url, description, reference, audio_script, pronunciations, voice_id, steps_json, status)
-               VALUES (?,?,?,?,?,?,?,?,?, 'new')""",
+               (id, name, target_url, description, reference, audio_script, pronunciations, voice_id, steps_json, capture_mode, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?, 'new')""",
             (
                 project["id"], project.get("name", ""), project["target_url"],
                 project.get("description", ""), project.get("reference", ""),
                 project.get("audio_script", ""),
                 json.dumps(project.get("pronunciations", {})),
                 project.get("voice_id", ""), json.dumps(project.get("steps", [])),
+                project.get("capture_mode", "web"),
             ),
         )
 

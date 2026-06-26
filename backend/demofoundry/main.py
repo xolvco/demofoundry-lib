@@ -53,12 +53,13 @@ class StepIn(BaseModel):
 
 class ProjectIn(BaseModel):
     name: str = ""
-    target_url: str
+    target_url: str = ""  # the app URL for web demos; unused for desktop recordings
     description: str = ""  # the goal / mission of the demo
     reference: str = ""  # optional docs/links about the app, for the builder
     audio_script: str = ""  # optional narration the user already has
     pronunciations: dict[str, str] = {}  # term -> spoken (applied to audio only)
     voice_id: str = ""
+    capture_mode: str = "web"  # "web" (drive w/ Playwright) | "desktop" (record)
     steps: list[StepIn] = []
 
 
@@ -74,6 +75,7 @@ class ProjectPatch(BaseModel):
     audio_script: str | None = None
     pronunciations: dict[str, str] | None = None
     voice_id: str | None = None
+    capture_mode: str | None = None
     steps: list[StepIn] | None = None
 
 
@@ -110,7 +112,7 @@ def create_project(body: ProjectIn) -> dict:
             "id": pid, "name": body.name, "target_url": body.target_url,
             "description": body.description, "reference": body.reference,
             "audio_script": body.audio_script, "pronunciations": body.pronunciations,
-            "voice_id": body.voice_id, "steps": steps,
+            "voice_id": body.voice_id, "capture_mode": body.capture_mode, "steps": steps,
         }
     )
     return {"id": pid}
@@ -154,6 +156,7 @@ def patch_project(pid: str, body: ProjectPatch) -> dict:
             "reference": body.reference,
             "audio_script": body.audio_script,
             "voice_id": body.voice_id,
+            "capture_mode": body.capture_mode,
         }.items()
         if v is not None
     }

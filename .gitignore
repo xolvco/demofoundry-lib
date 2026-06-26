@@ -17,6 +17,7 @@ workspace/
 # Ad-hoc CLI scratch output (the `demofoundry … --out-dir work` convention)
 work/
 work_*/
+work-*/
 
 # MkDocs build output
 site/

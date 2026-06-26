@@ -27,6 +27,18 @@ VIEWPORT = {"width": 1920, "height": 1080}
 # (longer) budget so genuinely slow apps still settle.
 ACTION_TIMEOUT_MS = 5000
 
+# Dwell after each action settles, before we stamp `ended_at`. Two reasons:
+#   1. A client-side (SPA) nav resolves `networkidle` *before* the new route
+#      paints, so without this the recorded end-frame is the OUTGOING screen —
+#      the sync engine then HOLDs that stale frame for the whole narration, and
+#      the demo looks frozen on the previous page. The settle lets the result
+#      paint and be recorded.
+#   2. It gives each scene a real slice of footage to hold/stretch instead of a
+#      sub-second sliver, so a 10-step walkthrough isn't crammed into ~4s.
+# `ended_at` (and the zoom/highlight rects) are read after this, so they reflect
+# the settled result the viewer should see.
+SETTLE_MS = 900
+
 # For each action, the field it needs to do anything. If that field is empty the
 # step matches no branch below and silently no-ops — we mark it "skipped" with
 # this name so the review UI can explain why.
@@ -119,6 +131,9 @@ async def capture(
 
                 # Let the React app settle so the recorded frame is stable.
                 await page.wait_for_load_state("networkidle")
+                # ...then dwell so an SPA route actually paints before we stamp
+                # `ended_at` — otherwise the held frame is the previous screen.
+                await page.wait_for_timeout(SETTLE_MS)
             except Exception as exc:  # the action raised (e.g. selector matched nothing)
                 status = "failed"
                 error = str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__

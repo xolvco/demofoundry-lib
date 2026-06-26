@@ -11,7 +11,7 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -97,6 +97,26 @@ def health() -> dict:
 def list_voices() -> list[dict]:
     """Narrator catalog for the Voice screen (with preview_url when available)."""
     return voices_api.list_voices()
+
+
+@app.post("/api/voices/clone")
+async def clone_voice(
+    name: str = Form(...),
+    files: list[UploadFile] = File(...),
+) -> dict:
+    """Instant Voice Clone: upload audio sample(s) of a voice -> a new voice_id.
+
+    The returned voice behaves like any narrator — pick it to have DemoFoundry
+    speak the script in that voice. Requires ELEVENLABS_API_KEY and the
+    speaker's consent to clone their voice.
+    """
+    blobs = [(f.filename or "sample", await f.read(), f.content_type) for f in files]
+    try:
+        return voices_api.clone_voice(name, blobs)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Voice clone failed: {exc}")
 
 
 @app.post("/api/projects")

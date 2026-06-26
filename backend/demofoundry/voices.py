@@ -28,6 +28,53 @@ def _fallback() -> list[dict]:
     return [{**v, "preview_url": None} for v in CURATED]
 
 
+def clone_voice(
+    name: str, files: list[tuple[str, bytes, str | None]], description: str = ""
+) -> dict:
+    """Create an Instant Voice Clone from audio samples and return its catalog row.
+
+    `files` is a list of (filename, bytes, content_type). ElevenLabs makes the
+    clone near-instantly; the returned voice_id then works exactly like any other
+    narrator (TTS speaks the script in that voice). Requires a key — cloning has
+    no offline fallback.
+
+    NOTE: you must have the speaker's consent to clone their voice; ElevenLabs
+    requires you to attest to this.
+    """
+    import httpx
+
+    if not config.ELEVENLABS_API_KEY:
+        raise RuntimeError("ELEVENLABS_API_KEY is required to clone a voice.")
+    if not name.strip():
+        raise ValueError("A name for the voice is required.")
+    if not files:
+        raise ValueError("At least one audio sample is required.")
+
+    multipart = [
+        ("files", (fn or "sample", blob, ct or "application/octet-stream"))
+        for fn, blob, ct in files
+    ]
+    data = {"name": name.strip()}
+    if description.strip():
+        data["description"] = description.strip()
+
+    resp = httpx.post(
+        "https://api.elevenlabs.io/v1/voices/add",
+        headers={"xi-api-key": config.ELEVENLABS_API_KEY},
+        data=data,
+        files=multipart,
+        timeout=120,
+    )
+    resp.raise_for_status()
+    voice_id = resp.json()["voice_id"]
+    return {
+        "id": voice_id,
+        "name": name.strip(),
+        "description": "Your voice",
+        "preview_url": None,
+    }
+
+
 def list_voices() -> list[dict]:
     """Return [{id, name, description, preview_url}] — live from ElevenLabs when
     possible, otherwise the curated fallback."""

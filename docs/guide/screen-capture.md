@@ -12,6 +12,16 @@ with **anything on screen** — a Tauri or Electron app, a native Windows progra
     `narrate → sync → compose` runs exactly as it does for the browser path — same audio-as-master
     clock, same HOLD/SPEED sync, same MP4 + SRT out. Your script's narration is unchanged.
 
+## Two ways to run it
+
+- **In the app (recommended).** On the **Project** screen choose **Desktop app**, then follow the
+  rail: **Record** (start/stop a screen capture) → **Mark** (play it back and place scene boundaries
+  on a timeline) → **Voice** → **Run**. Nothing to install beyond the requirements below.
+- **From the CLI.** One command records and renders — handy for scripting or headless runs (see
+  [below](#record-and-render-in-one-command)).
+
+Both paths produce the same recording + per-scene marks and feed the same render.
+
 ## Requirements
 
 - **ffmpeg** on `PATH` (already needed for compose) — provides the screen grabber (`gdigrab`).
@@ -83,6 +93,36 @@ ignored** — you're driving by hand, so only the narration (and the number/orde
 
 A bare JSON array works too. Any `action`/`target`/`zoom_target` fields are accepted but unused on
 this path.
+
+## Example: a script that demos this feature
+
+Here's a complete, copy-ready script whose subject **is the screen-capture feature** — the lines you'd
+narrate while recording a walkthrough of DemoFoundry's own **Project → Record → Mark → Run** flow.
+Save it as `steps.json`, start a **Desktop** demo with it (New demo → *Desktop app*), record the
+walkthrough, mark the scenes, pick a voice, and render.
+
+```json
+{
+  "name": "DemoFoundry — Record a desktop demo",
+  "steps": [
+    { "narration_text": "This is DemoFoundry. It turns a walkthrough of your app into a narrated, captioned demo video — and now it works for desktop apps, not just web pages." },
+    { "narration_text": "Here's the problem it solves. A web app can be driven automatically, but a native desktop app can't — there's nothing to click from the outside. So instead of driving your app, DemoFoundry records you using it, and takes care of the narration, timing, and polish." },
+    { "narration_text": "It begins on the Project screen. You choose how you'll capture this demo — drive a web app, or record a desktop app. We'll pick Desktop. There's no URL and no selectors to wire up." },
+    { "narration_text": "You drop in a script — just the words you want narrated, one line per scene — and click Create and record." },
+    { "narration_text": "On the Record screen you point DemoFoundry at a window: your app. Press Start, and it records the screen. No audio is captured — your narration is added later, so you can re-record your voice any time without re-recording the screen." },
+    { "narration_text": "Now you simply use your app, beat by beat, the way you'd show it to a colleague. Take your time and actually do things — scrub, click, type — so the video shows what the words describe. Press Stop when you're done." },
+    { "narration_text": "Next comes Mark. Your recording plays back on a timeline, and you drop a boundary at the start of each scene. The clicks you made while recording appear as snap points, so landing on the right moment is easy — and you're never editing the original footage." },
+    { "narration_text": "Each boundary splits the recording into scenes, shown as colored bands. This is the human part: you decide where each line of narration belongs, watching the video, not guessing at timestamps." },
+    { "narration_text": "Then you pick a voice, and DemoFoundry narrates every scene with it." },
+    { "narration_text": "Finally, Run. DemoFoundry narrates each scene, syncs the video to the audio — holding or speeding the footage so every line fits perfectly — and composes a finished MP4 with captions." },
+    { "narration_text": "That's the whole loop: record your real app once, mark the beats, and ship a polished demo. Approachable on the very first day — and it works with anything you can put on screen." }
+  ]
+}
+```
+
+Eleven scenes, so when you record you'll mark **ten** boundaries. As you capture, linger on each
+matching screen and perform the action the line describes — choose Desktop, press Start, drop a mark —
+so the footage demonstrates the feature instead of just describing it.
 
 ## Tips
 

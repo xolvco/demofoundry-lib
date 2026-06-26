@@ -131,6 +131,19 @@ async def capture(
 
                 # Let the React app settle so the recorded frame is stable.
                 await page.wait_for_load_state("networkidle")
+                # Bring the scene's focus area into view BEFORE the settle frame
+                # is recorded. The video only captures the viewport, so a
+                # highlight/zoom target below the fold would otherwise be off the
+                # recorded frame (and its rect would clamp to the top). Scrolling
+                # here keeps the recorded pixels and the rects we read in agreement.
+                focus_sel = step.zoom_target or step.highlight_target
+                if focus_sel:
+                    try:
+                        await page.locator(focus_sel).first.scroll_into_view_if_needed(
+                            timeout=ACTION_TIMEOUT_MS
+                        )
+                    except Exception:
+                        pass  # not scrollable / not found — fall back to current view
                 # ...then dwell so an SPA route actually paints before we stamp
                 # `ended_at` — otherwise the held frame is the previous screen.
                 await page.wait_for_timeout(SETTLE_MS)

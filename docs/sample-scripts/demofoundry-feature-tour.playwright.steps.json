@@ -1,0 +1,73 @@
+{
+  "name": "DemoFoundry — Feature tour (with Voice screen)",
+  "target_url": "http://localhost:3000",
+  "description": "The self-demo, extended to walk into the Voice screen and show cloning your own voice, the read-aloud sample popup, and the pacing sliders.",
+  "steps": [
+    {
+      "action": "navigate",
+      "value": "/",
+      "narration_text": "This is DemoFoundry — and this demo was made by DemoFoundry, driving its own interface. We start in the Library, where every project lives."
+    },
+    {
+      "action": "click",
+      "target": "text=New demo",
+      "narration_text": "To begin a new demo, you click New demo."
+    },
+    {
+      "action": "click",
+      "target": "button:has-text(\"Web app\")",
+      "zoom_target": "text=How will you capture this?",
+      "highlight_target": "button:has-text(\"Web app\")",
+      "narration_text": "First you pick how to capture. A web app gets driven automatically in a browser. A desktop app you record yourself. We're demoing a web app."
+    },
+    {
+      "action": "type",
+      "target": "#name",
+      "value": "Meridian — Invoice flow",
+      "narration_text": "You name the demo — the label you'll see back in your Library."
+    },
+    {
+      "action": "type",
+      "target": "#target",
+      "value": "http://localhost:3000",
+      "zoom_target": "#target",
+      "highlight_target": "#target",
+      "narration_text": "Then you point it at the app you want to demo — usually your own app on localhost."
+    },
+    {
+      "action": "click",
+      "target": "text=Reset to sample",
+      "zoom_target": "text=What we read",
+      "highlight_target": "text=What we read",
+      "narration_text": "You drop in a script — an ordered list of actions and the words to narrate — and DemoFoundry reads it back live, showing every scene it understood."
+    },
+    {
+      "action": "navigate",
+      "value": "/voice?id=__PROJECT_ID__",
+      "narration_text": "Once you've captured your app, you choose how it sounds. This is the Voice screen — a whole catalog of narrators, each with a preview you can play."
+    },
+    {
+      "action": "click",
+      "target": "button:has-text(\"Use my voice\")",
+      "highlight_target": "button:has-text(\"Use my voice\")",
+      "narration_text": "But the best voice might be your own. Click Use my voice, and you can record a one-minute sample — or upload one — and DemoFoundry clones it, so every demo sounds like you."
+    },
+    {
+      "action": "click",
+      "target": "text=Need a script to read?",
+      "highlight_target": "text=Read this while recording",
+      "narration_text": "Not sure what to say? There's a script right here — about a minute of natural speech to read aloud while you record, so the clone comes out clean."
+    },
+    {
+      "action": "navigate",
+      "value": "/voice?id=__PROJECT_ID__",
+      "highlight_target": "text=Pacing",
+      "narration_text": "And two sliders set the pace: how quickly the narration speaks, and how long each new screen holds before the voice begins — so nothing ever feels rushed."
+    },
+    {
+      "action": "wait",
+      "value": "800",
+      "narration_text": "Pick a voice, set the pace, and render. DemoFoundry narrates each scene, syncs the video to the audio, and ships a captioned MP4 — in any voice you like, even your own."
+    }
+  ]
+}

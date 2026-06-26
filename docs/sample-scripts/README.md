@@ -8,6 +8,7 @@ Copy-ready `steps.json` scripts you can run through DemoFoundry. Each is either 
 | File | Mode | What it demos |
 |---|---|---|
 | [`demofoundry-self-demo.playwright.steps.json`](demofoundry-self-demo.playwright.steps.json) | Web (Playwright) | DemoFoundry's own UI, fully click-driven — every step has a real selector. |
+| [`demofoundry-feature-tour.playwright.steps.json`](demofoundry-feature-tour.playwright.steps.json) | Web (Playwright) | The self-demo **plus** a walk through the Voice screen: cloning your own voice, the read-aloud popup, and the pacing sliders. Needs a project id (see below). |
 | [`demofoundry-web-tour.steps.json`](demofoundry-web-tour.steps.json) | Web (Playwright) | A lighter narrated tour of the DemoFoundry New-demo flow. |
 | [`webmethods-getting-started.steps.json`](webmethods-getting-started.steps.json) | Screen capture (Desktop) | Getting started with IBM webMethods.io Integration. |
 
@@ -107,6 +108,31 @@ Output lands in `backend/work-demo/render/`: `demo.mp4` and `demo.srt`.
     `Get-Content ..\.env | %{ if ($_ -match '^(\w+)=(.*)$') { Set-Item "env:$($matches[1])" $matches[2] } }`
     (or just rely on the backend's own `.env` loader when running through the app). The Bash form
     above works in Git Bash / WSL.
+
+### The feature tour (with the Voice screen)
+
+`demofoundry-feature-tour.playwright.steps.json` extends the self-demo with a walk through the
+**Voice** screen — cloning your own voice, the read-aloud popup, and the pacing sliders. The Voice
+screen lives at `/voice?id=<project>`, so the script has a `__PROJECT_ID__` placeholder you fill in
+with a real project. Create one and substitute it:
+
+```bash
+# create a throwaway project to land the Voice screen on
+PID=$(curl -s -X POST http://localhost:8001/api/projects \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Feature tour","target_url":"http://localhost:3000"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['id'])")
+
+# substitute it into a working copy, then render
+sed "s/__PROJECT_ID__/$PID/g" \
+  ../docs/sample-scripts/demofoundry-feature-tour.playwright.steps.json > /tmp/feature-tour.json
+
+demofoundry render --url http://localhost:3000 --steps /tmp/feature-tour.json \
+  --out-dir work-tour --voice EXAVITQu4vr4xnSDxMaL
+```
+
+The capture scrolls each highlighted area into view, so the pacing sliders (which sit below the voice
+grid) show up even though they start below the fold.
 
 ## Running a screen-capture script
 

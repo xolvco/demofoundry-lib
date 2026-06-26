@@ -1,0 +1,17 @@
+{
+  "name": "Getting started with IBM webMethods Integration",
+  "description": "A narrated walkthrough of getting started with IBM webMethods.io Integration: signing up, provisioning, creating a project, and building your first workflow with the flow editor. Built for the screen-capture (Desktop) path — you record yourself driving webMethods.io in the browser; the selectors aren't used.",
+  "steps": [
+    { "narration_text": "This is a quick getting-started tour of IBM webMethods Integration — the cloud, drag-and-drop integration platform. We'll go from a brand-new account to a running workflow." },
+    { "narration_text": "First, an account. On IBM webMethods Cloud, choose Sign up — you can start on the free tier. Fill in your details and confirm the email it sends you, which usually arrives in a couple of minutes." },
+    { "narration_text": "Once you're verified, log back in. The dashboard shows the products available to you. Find Integration and start it — accept the terms, then give it a few minutes to provision your tenant." },
+    { "narration_text": "When provisioning finishes, click Open to launch webMethods Integration. This is the home page — your starting point. Across the top you'll see Projects, Monitor, and Recipes." },
+    { "narration_text": "Everything you build lives inside a project. Open the Projects tab and click the plus icon to create a new one. Give it a name — this groups your integrations, settings, and runtime together." },
+    { "narration_text": "Inside the project, open the Integrations section and create a new workflow from scratch. The canvas is where you'll design it, and the panel on the right holds hundreds of ready-made connectors." },
+    { "narration_text": "Building is drag-and-drop. Pull a connector onto the canvas — a trigger to start the flow, then an action. There are well over five hundred connectors, so most apps you use are already here." },
+    { "narration_text": "Click into each connector's settings to choose its action and provide a connection — your credentials or endpoint. webMethods is test-driven: run each step right there to confirm it connects and to see the data it returns." },
+    { "narration_text": "Between steps you map the data — wiring the output of one connector into the input of the next on the mapping screen. Testing as you go means you always know the shape of the data you're passing along." },
+    { "narration_text": "When the flow is wired up, save it and click Run. webMethods executes the workflow end to end." },
+    { "narration_text": "Finally, open Monitor — or the execution history in the left panel — to see each run, step by step, with the data at every stage. That's the whole loop: sign up, create a project, drag in connectors, map the data, and run. From there you can add triggers, schedules, and error handling to take it to production." }
+  ]
+}

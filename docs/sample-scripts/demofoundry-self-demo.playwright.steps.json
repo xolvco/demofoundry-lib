@@ -1,0 +1,68 @@
+{
+  "name": "DemoFoundry — Self demo (Playwright)",
+  "target_url": "http://localhost:3000",
+  "description": "A fully click-driven tour of DemoFoundry's own web UI. Every step has a real Playwright selector against the app on localhost:3000, so the capture path can drive the whole New-demo flow hands-free. Run with the web capture mode (demofoundry render --url http://localhost:3000 --steps this-file).",
+  "steps": [
+    {
+      "action": "navigate",
+      "value": "/",
+      "narration_text": "This is DemoFoundry — and this demo was made by DemoFoundry, driving its own interface. We start in the Library, where every project lives."
+    },
+    {
+      "action": "click",
+      "target": "text=New demo",
+      "narration_text": "To begin a new demo, you click New demo."
+    },
+    {
+      "action": "click",
+      "target": "button:has-text(\"Web app\")",
+      "zoom_target": "text=How will you capture this?",
+      "highlight_target": "button:has-text(\"Web app\")",
+      "narration_text": "First you pick how to capture. A web app gets driven automatically in a browser — that's this path. A desktop app you record yourself. We're demoing a web app."
+    },
+    {
+      "action": "type",
+      "target": "#name",
+      "value": "Meridian — Invoice flow",
+      "narration_text": "You name the demo. This is just the label you'll see back in your Library."
+    },
+    {
+      "action": "type",
+      "target": "#target",
+      "value": "http://localhost:3000",
+      "zoom_target": "#target",
+      "highlight_target": "#target",
+      "narration_text": "Then you point it at the running app you want to demo — usually your own app on localhost. Stable test IDs make capture most reliable."
+    },
+    {
+      "action": "click",
+      "target": "text=Reset to sample",
+      "narration_text": "Now the script — an ordered list of actions and the words to narrate. We'll load the built-in sample to see the shape of one."
+    },
+    {
+      "action": "click",
+      "target": "textarea",
+      "narration_text": "The script is just JSON. You can paste your own, drop a steps.json file onto the upload zone, or edit it right here."
+    },
+    {
+      "action": "type",
+      "target": "#goal",
+      "value": "A quick tour of the invoicing flow — open a new invoice, add a customer and line items, apply a discount, and send it.",
+      "zoom_target": "#goal",
+      "narration_text": "You can also describe what you're demoing in plain English, and let Claude write any narration your steps don't already include."
+    },
+    {
+      "action": "wait",
+      "value": "1200",
+      "target": "text=What we read",
+      "zoom_target": "text=What we read",
+      "highlight_target": "text=What we read",
+      "narration_text": "All the while, the What we read panel parses your script live — every scene, the action it'll take, and where it'll zoom or highlight."
+    },
+    {
+      "action": "click",
+      "target": "text=Cancel",
+      "narration_text": "From here you'd pick a voice and render. DemoFoundry drives your app once, narrates each scene, syncs the video to the audio, and composes a captioned MP4. Point it at your app, give it a script, and ship a polished demo."
+    }
+  ]
+}

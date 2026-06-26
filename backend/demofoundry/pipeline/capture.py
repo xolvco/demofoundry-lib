@@ -126,7 +126,11 @@ async def capture(
 
             ended = time.monotonic() - clock0
 
-            zoom_rect = target_rect
+            # Zoom is opt-in: only crop in when the step explicitly names a
+            # zoom_target. Defaulting to the clicked element zoomed every "click a
+            # tab" step into that tiny button, pixelating the label instead of
+            # showing the page. The click marker + highlight already point the eye.
+            zoom_rect = None
             if step.zoom_target:
                 zoom_rect = await _rect(page.locator(step.zoom_target).first)
             highlight_rect = None

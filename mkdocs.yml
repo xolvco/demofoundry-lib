@@ -27,6 +27,7 @@ nav:
   - User Guide:
       - Overview: guide/overview.md
       - CLI: guide/cli.md
+      - Screen capture (desktop): guide/screen-capture.md
       - Library: guide/library.md
   - MVP Features: features.md
   - Architecture:

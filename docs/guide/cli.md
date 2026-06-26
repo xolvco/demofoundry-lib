@@ -3,6 +3,10 @@
 DemoFoundry exposes **each pipeline step as a subcommand**. Steps chain on the filesystem (JSON
 artifacts), so you can run the whole thing at once or run — and debug — any single stage on its own.
 
+!!! tip "Demoing a desktop app?"
+    This page covers the browser/automation path. For native desktop apps (where there are no
+    selectors to drive), record yourself instead — see [Screen capture](screen-capture.md).
+
 ## Install
 
 ```bash

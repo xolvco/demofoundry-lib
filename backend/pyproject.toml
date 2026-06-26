@@ -12,12 +12,14 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-browser = ["playwright>=1.43"]   # capture
+browser = ["playwright>=1.43"]   # capture (web apps)
+screencap = ["pynput>=1.7"]       # capture (desktop: gdigrab + global input hook)
 ai = ["anthropic>=0.40"]          # scripting
 voice = ["httpx>=0.27"]           # ElevenLabs TTS
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
 all = [
     "playwright>=1.43",
+    "pynput>=1.7",
     "anthropic>=0.40",
     "httpx>=0.27",
     "fastapi>=0.110",

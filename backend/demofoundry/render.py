@@ -17,7 +17,7 @@ from typing import Callable
 
 from . import store
 from .models import ActionRecord, Step
-from .pipeline import capture, compose, sync, tts
+from .pipeline import capture, compose, screencap, sync, tts
 
 
 def apply_pronunciations(text: str, catalog: dict[str, str] | None) -> str:
@@ -81,6 +81,28 @@ async def render_to_files(
     if on_records:
         on_records(records)
 
+    return await _narrate_sync_compose(
+        video, records, steps, out_dir, voice_id, pronunciations, status, progress
+    )
+
+
+async def _narrate_sync_compose(
+    video: Path,
+    records: dict[str, ActionRecord],
+    steps: list[Step],
+    out_dir: Path,
+    voice_id: str,
+    pronunciations: dict[str, str] | None,
+    status: Callable[[str], None],
+    progress: Callable[[str], None],
+) -> tuple[Path, Path]:
+    """The capture-agnostic tail: narrate each scene, sync to the video, compose.
+
+    Shared by the browser path (capture.py) and the screen-capture path
+    (screencap.py) — both just supply (video, records). Audio is the master
+    clock; sync HOLDs/SPEEDs each video slice to fit its narration.
+    """
+    total = len(steps)
     status("narrating")
     durations: dict[str, float] = {}
     audio_paths: dict[str, str] = {}
@@ -106,6 +128,48 @@ async def render_to_files(
         compose.write_srt, steps, plan, out_dir / "render" / "demo.srt"
     )
     return video_out, srt_out
+
+
+async def render_screencap_to_files(
+    events: dict,
+    steps: list[Step],
+    out_dir: Path,
+    voice_id: str = "default",
+    anchor: str = "marks",
+    on_status: Callable[[str], None] | None = None,
+    on_records: Callable[[dict[str, ActionRecord]], None] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    pronunciations: dict[str, str] | None = None,
+) -> tuple[Path, Path]:
+    """Screen-capture render: a recording you made + your script -> narrated MP4.
+
+    `events` is the dict screencap.record() produced (it carries the video path,
+    clicks, and marks). The marks/clicks become per-scene boundaries; everything
+    after is identical to the browser path.
+    """
+    if not steps:
+        raise RuntimeError("This demo has no scenes — add at least one step before rendering.")
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def status(s: str) -> None:
+        if on_status:
+            on_status(s)
+
+    def progress(msg: str) -> None:
+        if on_progress:
+            on_progress(msg)
+
+    status("capturing")
+    progress("Aligning your recording to the script")
+    records = screencap.to_records(events, steps, anchor=anchor)
+    if on_records:
+        on_records(records)
+
+    video = Path(events["video"])
+    return await _narrate_sync_compose(
+        video, records, steps, out_dir, voice_id, pronunciations, status, progress
+    )
 
 
 async def run(pid: str) -> None:

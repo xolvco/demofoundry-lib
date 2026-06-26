@@ -103,6 +103,8 @@ def _cmd_render(args) -> int:
         render.render_to_files(
             args.url, steps, Path(args.out_dir), args.voice,
             on_status=lambda s: print(f"  …{s}"),
+            voice_speed=args.voice_speed,
+            scene_lead_ms=args.scene_lead,
         )
     )
     print(f"video: {video}")
@@ -161,6 +163,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--out-dir", required=True)
     c.add_argument("--desc", help="optional: let Claude write narration first")
     c.add_argument("--voice", default="default")
+    c.add_argument("--voice-speed", type=float, default=None,
+                   help="speaking rate; 1.0 normal, <1.0 slower (0.7–1.2). "
+                        "Default from config (0.9).")
+    c.add_argument("--scene-lead", type=int, default=None, metavar="MS",
+                   help="silent hold (ms) on each new screen before the voice "
+                        "starts. Default from config (600).")
     c.set_defaults(func=_cmd_render)
 
     c = sub.add_parser("serve", help="launch the local web app")

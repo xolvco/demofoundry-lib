@@ -23,11 +23,20 @@ WORDS_PER_SECOND = 2.6
 SAMPLE_RATE = 44100
 
 
-def synth(text: str, voice_id: str, out_path: Path) -> tuple[Path, float, WordTimings]:
-    """Render `text` to `out_path`. Uses ElevenLabs if keyed, else silence."""
+def synth(
+    text: str, voice_id: str, out_path: Path, speed: float | None = None
+) -> tuple[Path, float, WordTimings]:
+    """Render `text` to `out_path`. Uses ElevenLabs if keyed, else silence.
+
+    `speed` controls speaking rate (1.0 = normal, <1.0 slower); defaults to
+    `config.VOICE_SPEED`. ElevenLabs clamps to 0.7–1.2, so we do too.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if speed is None:
+        speed = config.VOICE_SPEED
+    speed = max(0.7, min(1.2, speed))
     if config.ELEVENLABS_API_KEY:
-        return _elevenlabs(text, voice_id, out_path)
+        return _elevenlabs(text, voice_id, out_path, speed)
     return _silent(text, out_path.with_suffix(".wav"))
 
 
@@ -43,7 +52,9 @@ def _silent(text: str, out_path: Path) -> tuple[Path, float, WordTimings]:
     return out_path, duration, []
 
 
-def _elevenlabs(text: str, voice_id: str, out_path: Path) -> tuple[Path, float, WordTimings]:
+def _elevenlabs(
+    text: str, voice_id: str, out_path: Path, speed: float = 1.0
+) -> tuple[Path, float, WordTimings]:
     """Render via ElevenLabs with character-level timestamps -> word timings."""
     import base64
 
@@ -56,7 +67,11 @@ def _elevenlabs(text: str, voice_id: str, out_path: Path) -> tuple[Path, float, 
     resp = httpx.post(
         url,
         headers={"xi-api-key": config.ELEVENLABS_API_KEY},
-        json={"text": text, "model_id": "eleven_multilingual_v2"},
+        json={
+            "text": text,
+            "model_id": "eleven_multilingual_v2",
+            "voice_settings": {"speed": speed},
+        },
         timeout=120,
     )
     resp.raise_for_status()

@@ -36,3 +36,11 @@ AZURE_SPEECH_REGION = os.environ.get("AZURE_SPEECH_REGION")
 
 # Default scripting model (see the claude-api guidance).
 CLAUDE_MODEL = os.environ.get("DEMOFOUNDRY_CLAUDE_MODEL", "claude-opus-4-8")
+
+# Pacing defaults (overridable per-render via the CLI/API).
+#   VOICE_SPEED   — ElevenLabs voice_settings.speed; 1.0 = normal, <1.0 slower.
+#                   The provider clamps to 0.7–1.2, so we do too.
+#   SCENE_LEAD_MS — silent hold of each scene's first frame before the voice
+#                   starts, giving the viewer a beat to register a new screen.
+VOICE_SPEED = float(os.environ.get("DEMOFOUNDRY_VOICE_SPEED", "0.9"))
+SCENE_LEAD_MS = int(os.environ.get("DEMOFOUNDRY_SCENE_LEAD_MS", "600"))

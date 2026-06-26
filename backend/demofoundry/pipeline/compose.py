@@ -71,10 +71,17 @@ def _video_filter(seg: Segment, rec_rects) -> str:
             "drawbox=x=%d:y=%d:w=28:h=28:color=red@0.6:t=fill"
             % (int(cx) - 14, int(cy) - 14)
         )
+    # tpad does both end-hold (freeze last frame to wait for narration) and the
+    # lead-in (freeze first frame so the viewer registers a new screen before
+    # the voice starts). The head pad clones the already-zoomed/highlighted
+    # first frame, so the still matches the scene.
+    pad = []
+    if seg.lead > 0.01:
+        pad.append("start_mode=clone:start_duration=%.3f" % seg.lead)
     if seg.hold_tail > 0.01:
-        f.append(
-            "tpad=stop_mode=clone:stop_duration=%.3f" % seg.hold_tail
-        )
+        pad.append("stop_mode=clone:stop_duration=%.3f" % seg.hold_tail)
+    if pad:
+        f.append("tpad=" + ":".join(pad))
     return ",".join(f)
 
 
@@ -91,10 +98,14 @@ def _render_segment(
         cmd += ["-i", seg.audio_path]
     else:
         cmd += ["-f", "lavfi", "-t", "%.3f" % seg.target_duration, "-i", "anullsrc=r=44100:cl=stereo"]
+    # Delay the narration by the scene lead so the voice starts after the silent
+    # first-frame hold; apad then fills any tail, atrim locks total length.
+    delay_ms = int(round(seg.lead * 1000))
+    adelay = "adelay=%d:all=1," % delay_ms if delay_ms > 0 else ""
     cmd += [
         "-filter_complex",
-        "[0:v]%s[v];[1:a]apad,atrim=0:%.3f,asetpts=PTS-STARTPTS[a]"
-        % (vf, seg.target_duration),
+        "[0:v]%s[v];[1:a]%sapad,atrim=0:%.3f,asetpts=PTS-STARTPTS[a]"
+        % (vf, adelay, seg.target_duration),
         "-map", "[v]", "-map", "[a]",
         "-t", "%.3f" % seg.target_duration,
         "-r", "30", "-pix_fmt", "yuv420p",
@@ -141,8 +152,9 @@ def write_srt(steps: list[Step], plan: RenderPlan, out_path: Path) -> Path:
         seg = by_id.get(step.id)
         if not seg or not step.narration_text.strip():
             continue
-        start, end = t, t + seg.target_duration
-        t = end
+        # Caption begins when the voice does — after the silent lead-in hold.
+        start, end = t + seg.lead, t + seg.target_duration
+        t = t + seg.target_duration
         lines += [str(i), f"{_ts(start)} --> {_ts(end)}", step.narration_text, ""]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path

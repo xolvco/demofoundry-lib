@@ -43,6 +43,8 @@ async def render_to_files(
     on_records: Callable[[dict[str, ActionRecord]], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     pronunciations: dict[str, str] | None = None,
+    voice_speed: float | None = None,
+    scene_lead_ms: int | None = None,
 ) -> tuple[Path, Path]:
     """Run the whole pipeline to disk. Returns (video_path, srt_path).
 
@@ -83,7 +85,8 @@ async def render_to_files(
         on_records(records)
 
     return await _narrate_sync_compose(
-        video, records, steps, out_dir, voice_id, pronunciations, status, progress
+        video, records, steps, out_dir, voice_id, pronunciations, status, progress,
+        voice_speed, scene_lead_ms,
     )
 
 
@@ -96,12 +99,17 @@ async def _narrate_sync_compose(
     pronunciations: dict[str, str] | None,
     status: Callable[[str], None],
     progress: Callable[[str], None],
+    voice_speed: float | None = None,
+    scene_lead_ms: int | None = None,
 ) -> tuple[Path, Path]:
     """The capture-agnostic tail: narrate each scene, sync to the video, compose.
 
     Shared by the browser path (capture.py) and the screen-capture path
     (screencap.py) — both just supply (video, records). Audio is the master
     clock; sync HOLDs/SPEEDs each video slice to fit its narration.
+
+    `voice_speed` (<1.0 = slower) and `scene_lead_ms` (silent hold on each new
+    screen before the voice) default to `config.VOICE_SPEED`/`SCENE_LEAD_MS`.
     """
     total = len(steps)
     status("narrating")
@@ -113,14 +121,15 @@ async def _narrate_sync_compose(
         # tts.synth is a blocking network/file call — run it off the event loop so
         # the web server stays responsive (status/progress stay pollable live).
         path, dur, _timings = await asyncio.to_thread(
-            tts.synth, spoken, voice_id, out_dir / "audio" / step.id
+            tts.synth, spoken, voice_id, out_dir / "audio" / step.id, voice_speed
         )
         durations[step.id] = dur
         audio_paths[step.id] = str(path)
 
     status("composing")
     progress("Composing video + captions")
-    plan = sync.build_plan(steps, records, durations, audio_paths)
+    lead_seconds = None if scene_lead_ms is None else scene_lead_ms / 1000.0
+    plan = sync.build_plan(steps, records, durations, audio_paths, lead_seconds)
     # ffmpeg compose is the longest blocking call — also off-loop.
     video_out = await asyncio.to_thread(
         compose.render, plan, video, records, out_dir / "render"
@@ -141,6 +150,8 @@ async def render_screencap_to_files(
     on_records: Callable[[dict[str, ActionRecord]], None] | None = None,
     on_progress: Callable[[str], None] | None = None,
     pronunciations: dict[str, str] | None = None,
+    voice_speed: float | None = None,
+    scene_lead_ms: int | None = None,
 ) -> tuple[Path, Path]:
     """Screen-capture render: a recording you made + your script -> narrated MP4.
 
@@ -169,7 +180,8 @@ async def render_screencap_to_files(
 
     video = Path(events["video"])
     return await _narrate_sync_compose(
-        video, records, steps, out_dir, voice_id, pronunciations, status, progress
+        video, records, steps, out_dir, voice_id, pronunciations, status, progress,
+        voice_speed, scene_lead_ms,
     )
 
 

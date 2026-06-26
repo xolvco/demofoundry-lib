@@ -13,7 +13,7 @@ Pure function of durations — no video touched here, so it is unit-testable.
 
 from __future__ import annotations
 
-from .. import models
+from .. import config, models
 from ..models import ActionRecord, RenderPlan, Segment, SegmentOp, Step
 
 # Beyond this we're just cutting dead time (page loads, spinners) rather than
@@ -28,6 +28,7 @@ def build_plan(
     records: dict[str, ActionRecord],
     narration_durations: dict[str, float],
     audio_paths: dict[str, str] | None = None,
+    lead_seconds: float | None = None,
 ) -> RenderPlan:
     """Reconcile each step's video window against its narration duration.
 
@@ -36,11 +37,17 @@ def build_plan(
         records: step_id -> ActionRecord (video window, from capture).
         narration_durations: step_id -> seconds of rendered narration.
         audio_paths: step_id -> per-step audio clip path (optional).
+        lead_seconds: silent hold of each scene's first frame before the voice
+            starts (lets the viewer register a new screen). Defaults to
+            `config.SCENE_LEAD_MS`.
 
     Returns:
-        A RenderPlan whose total duration equals the sum of narration durations.
+        A RenderPlan whose total duration = sum(narration) + lead-per-scene.
     """
     audio_paths = audio_paths or {}
+    if lead_seconds is None:
+        lead_seconds = config.SCENE_LEAD_MS / 1000.0
+    lead_seconds = max(0.0, lead_seconds)
     segments: list[Segment] = []
 
     for step in steps:
@@ -95,6 +102,11 @@ def build_plan(
                 hold_tail=max(0.0, target - shown),
                 audio_path=audio_paths.get(step.id),
             )
+        # Prepend a silent hold of the scene's first frame: the new screen is
+        # held quietly for `lead_seconds`, then the narration begins. Extends
+        # the scene's total by the lead (compose freezes the head + delays audio).
+        seg.lead = lead_seconds
+        seg.target_duration += lead_seconds
         segments.append(seg)
 
     return RenderPlan(segments=segments)

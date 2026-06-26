@@ -89,6 +89,7 @@ class Segment:
     op: SegmentOp
     speed: float = 1.0      # SPEED: src_dur/target_dur; >1 = fast-forward
     hold_tail: float = 0.0  # HOLD: seconds to freeze the last frame
+    lead: float = 0.0       # silent freeze of the FIRST frame before narration
     audio_path: Optional[str] = None  # per-step narration clip
 
     @property

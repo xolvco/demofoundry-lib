@@ -32,6 +32,27 @@ demofoundry render --url http://localhost:3000 --steps steps.json --out-dir work
 
 Outputs `work/render/demo.mp4` and `demo.srt`.
 
+### Pacing
+
+Two knobs control how relaxed the result feels (both have sensible defaults, so
+you only set them to taste):
+
+```bash
+demofoundry render --url http://localhost:3000 --steps steps.json --out-dir work \
+  --voice-speed 0.9 \   # speaking rate: 1.0 normal, <1.0 slower (0.7–1.2). Default 0.9
+  --scene-lead 600      # silent hold (ms) on each new screen before the voice. Default 600
+```
+
+- **`--voice-speed`** slows (or speeds) the narration. It's a native ElevenLabs
+  setting, so pitch is preserved — `0.9` is a gentle, unhurried default.
+- **`--scene-lead`** freezes each scene's first frame silently for that many
+  milliseconds before the voice starts, giving the viewer a beat to take in a
+  new screen. Set `0` to start talking immediately.
+
+The same defaults apply on every path (browser and screen-capture) and can be
+set globally with the `DEMOFOUNDRY_VOICE_SPEED` / `DEMOFOUNDRY_SCENE_LEAD_MS`
+environment variables.
+
 ## Step by step
 
 Each command consumes and produces files, so you can stop, inspect, and re-run any stage:

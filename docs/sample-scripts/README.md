@@ -27,6 +27,87 @@ The selectors are taken from the live UI (`text=New demo`, `button:has-text("Web
 `#target`, `text=Reset to sample`, `text=What we read`, `text=Cancel`). If the UI changes, update the
 `target` fields to match.
 
+### Build the DemoFoundry demo with no GUI
+
+This is the exact, copy-paste recipe used to produce the **DemoFoundry self-demo** — Playwright
+drives the live UI, so nothing is recorded by hand.
+
+#### 1. Set up the backend (one time)
+
+```bash
+cd backend
+python -m venv .venv
+. .venv/Scripts/activate        # macOS/Linux: . .venv/bin/activate
+pip install -e ".[all]"          # installs the `demofoundry` CLI + Playwright, FastAPI, etc.
+playwright install chromium      # the headless browser that drives the app
+# ffmpeg must also be on PATH (https://ffmpeg.org) — it does the compose step.
+```
+
+#### 2. Add your API keys
+
+The self-demo narrates with ElevenLabs (and can let Claude write narration), so it needs keys.
+Copy the template and fill it in:
+
+```bash
+cp ../.env.example ../.env       # both live at the repo root, next to backend/
+```
+
+Edit `.env` and set:
+
+```ini
+ELEVENLABS_API_KEY=sk_...        # required for voice (without it, narration is silent)
+ANTHROPIC_API_KEY=sk-ant-...     # optional — only if you let Claude write/expand the script
+```
+
+`.env` is gitignored — your keys never get committed. The backend loads it automatically; for the
+CLI you load it into the shell (step 4).
+
+#### 3. Start the app it will demo
+
+In two terminals (the demo drives DemoFoundry itself, so DemoFoundry must be running):
+
+```bash
+# terminal A — backend API on :8001
+cd backend && uvicorn demofoundry.main:app --port 8001
+
+# terminal B — frontend UI on :3000
+cd ../../demofoundry-app && npm install && npm run dev
+```
+
+The frontend reads the backend URL from `demofoundry-app/.env.local` —
+set `NEXT_PUBLIC_API_BASE=http://localhost:8001` there so the UI can reach the API. (Only the
+DemoFoundry self-demo needs the backend running, because the *app being demoed* is DemoFoundry
+itself; `demofoundry render` on its own just needs the target app reachable at `--url`.)
+
+#### 4. Render the demo
+
+From `backend/`, with the app up on `:3000`:
+
+```bash
+# load the keys from the repo-root .env into this shell
+set -a; . ../.env; set +a
+
+demofoundry render \
+  --url http://localhost:3000 \
+  --steps ../docs/sample-scripts/demofoundry-self-demo.playwright.steps.json \
+  --out-dir work-demo \
+  --voice EXAVITQu4vr4xnSDxMaL \   # ElevenLabs voice id (any from your voice list)
+  --voice-speed 0.9 \              # optional — slower, unhurried narration (default 0.9)
+  --scene-lead 600                 # optional — silent beat on each new screen (ms, default 600)
+```
+
+Output lands in `backend/work-demo/render/`: `demo.mp4` and `demo.srt`.
+
+!!! warning "Pass a real `--voice`"
+    The CLI's default `--voice` is the literal `default`, which ElevenLabs rejects (404). Always pass
+    a voice id — the one above is the same warm "Sarah" voice the app defaults to.
+
+!!! tip "Windows note"
+    On PowerShell, load the env with
+    `Get-Content ..\.env | %{ if ($_ -match '^(\w+)=(.*)$') { Set-Item "env:$($matches[1])" $matches[2] } }`
+    (or just rely on the backend's own `.env` loader when running through the app). The Bash form
+    above works in Git Bash / WSL.
+
 ## Running a screen-capture script
 
 `webmethods-getting-started.steps.json` targets IBM webMethods.io — an external SaaS you can't (and

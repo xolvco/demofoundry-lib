@@ -62,7 +62,7 @@
     {
       "action": "click",
       "target": "text=Cancel",
-      "narration_text": "From here you'd pick a voice and render. DemoFoundry drives your app once, narrates each scene, syncs the video to the audio, and composes a captioned MP4. Point it at your app, give it a script, and ship a polished demo."
+      "narration_text": "From here you'd pick a voice — even your own, cloned in a minute — and set the pace, so the narration is unhurried and each new screen gets a beat to land. Then render. DemoFoundry drives your app once, narrates each scene, syncs the video to the audio, and composes a captioned MP4. Point it at your app, give it a script, and ship a polished demo."
     }
   ]
 }

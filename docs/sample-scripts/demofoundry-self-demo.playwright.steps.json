@@ -60,9 +60,11 @@
       "narration_text": "All the while, the What we read panel parses your script live — every scene, the action it'll take, and where it'll zoom or highlight."
     },
     {
-      "action": "click",
-      "target": "text=Cancel",
-      "narration_text": "From here you'd pick a voice — even your own, cloned in a minute — and set the pace, so the narration is unhurried and each new screen gets a beat to land. Then render. DemoFoundry drives your app once, narrates each scene, syncs the video to the audio, and composes a captioned MP4. Point it at your app, give it a script, and ship a polished demo."
+      "action": "wait",
+      "value": "1500",
+      "target": "button:has-text(\"Analyze & write script\")",
+      "highlight_target": "button:has-text(\"Analyze & write script\")",
+      "narration_text": "With the script in place, you'd click Analyze and write script to move on — from here it's pick a voice, even your own cloned in a minute, set the pace, and render. DemoFoundry drives your app once, narrates each scene, syncs the video to the audio, and composes a captioned MP4. Point it at your app, give it a script, and ship a polished demo."
     }
   ]
 }

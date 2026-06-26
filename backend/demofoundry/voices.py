@@ -25,7 +25,7 @@ CURATED = [
 
 
 def _fallback() -> list[dict]:
-    return [{**v, "preview_url": None} for v in CURATED]
+    return [{**v, "preview_url": None, "category": "premade"} for v in CURATED]
 
 
 def clone_voice(
@@ -72,6 +72,7 @@ def clone_voice(
         "name": name.strip(),
         "description": "Your voice",
         "preview_url": None,
+        "category": "cloned",
     }
 
 
@@ -98,7 +99,12 @@ def list_voices() -> list[dict]:
                 "name": v.get("name", ""),
                 "description": desc,
                 "preview_url": v.get("preview_url"),
+                # "cloned" / "professional" / "premade" / "generated" — lets the
+                # UI badge a user's own (cloned) voices.
+                "category": v.get("category", "premade"),
             })
+        # Cloned voices first so a user's own voice is easy to find.
+        out.sort(key=lambda x: x["category"] != "cloned")
         return out or _fallback()
     except Exception as exc:  # never block the picker on a flaky API
         print(f"[voices] could not list ElevenLabs voices: {exc}")

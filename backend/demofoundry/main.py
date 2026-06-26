@@ -60,6 +60,8 @@ class ProjectIn(BaseModel):
     pronunciations: dict[str, str] = {}  # term -> spoken (applied to audio only)
     voice_id: str = ""
     capture_mode: str = "web"  # "web" (drive w/ Playwright) | "desktop" (record)
+    voice_speed: float | None = None  # narration rate (None = config default 0.9)
+    scene_lead_ms: int | None = None  # silent hold on each new screen (None = 600)
     steps: list[StepIn] = []
 
 
@@ -76,6 +78,8 @@ class ProjectPatch(BaseModel):
     pronunciations: dict[str, str] | None = None
     voice_id: str | None = None
     capture_mode: str | None = None
+    voice_speed: float | None = None
+    scene_lead_ms: int | None = None
     steps: list[StepIn] | None = None
 
 
@@ -177,6 +181,8 @@ def patch_project(pid: str, body: ProjectPatch) -> dict:
             "audio_script": body.audio_script,
             "voice_id": body.voice_id,
             "capture_mode": body.capture_mode,
+            "voice_speed": body.voice_speed,
+            "scene_lead_ms": body.scene_lead_ms,
         }.items()
         if v is not None
     }

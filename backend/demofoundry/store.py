@@ -46,7 +46,9 @@ def init() -> None:
                 audio_script TEXT,
                 pronunciations TEXT,
                 progress TEXT,
-                capture_mode TEXT DEFAULT 'web'
+                capture_mode TEXT DEFAULT 'web',
+                voice_speed REAL,
+                scene_lead_ms INTEGER
             )"""
         )
         # Migrate older DBs that predate later columns.
@@ -63,6 +65,11 @@ def init() -> None:
             c.execute("ALTER TABLE projects ADD COLUMN progress TEXT")
         if "capture_mode" not in cols:
             c.execute("ALTER TABLE projects ADD COLUMN capture_mode TEXT DEFAULT 'web'")
+        # Per-project pacing (NULL = use config defaults).
+        if "voice_speed" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN voice_speed REAL")
+        if "scene_lead_ms" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN scene_lead_ms INTEGER")
 
 
 def create(project: dict) -> None:

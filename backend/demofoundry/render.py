@@ -212,6 +212,9 @@ async def run(pid: str) -> None:
         on_records=save_results,
         on_progress=lambda m: store.update(pid, progress=m),
         pronunciations=project.get("pronunciations") or {},
+        # Per-project pacing; None falls back to config defaults in tts/sync.
+        voice_speed=project.get("voice_speed"),
+        scene_lead_ms=project.get("scene_lead_ms"),
     )
     try:
         store.update(pid, status="capturing", error=None, progress="")

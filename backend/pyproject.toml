@@ -13,7 +13,11 @@ dependencies = []
 
 [project.optional-dependencies]
 browser = ["playwright>=1.43"]   # capture (web apps)
-screencap = ["pynput>=1.7"]       # capture (desktop: gdigrab + global input hook)
+screencap = ["pynput>=1.7"]       # capture (desktop, Windows: gdigrab + input hook)
+# macOS desktop capture: avfoundation + Quartz window geometry. pyobjc is
+# macOS-only, so it lives in its own extra (kept out of `all`, which must stay
+# cross-platform installable).
+screencap-macos = ["pynput>=1.7", "pyobjc-framework-Quartz>=10.0"]
 ai = ["anthropic>=0.40"]          # scripting
 voice = ["httpx>=0.27"]           # ElevenLabs TTS
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]

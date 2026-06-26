@@ -2,13 +2,16 @@
 
 The browser/automation path (capture.py) needs the app to expose stable hooks.
 Desktop apps mostly don't. This path sidesteps that entirely: it records the
-screen with ffmpeg (gdigrab) while logging your real mouse clicks and optional
-hotkey marks, then hands the rest of the pipeline the SAME contract capture.py
-produces — (video_path, {step_id: ActionRecord}) — so narrate -> sync -> compose
-run unchanged.
+screen with ffmpeg (gdigrab on Windows, avfoundation on macOS) while logging your
+real mouse clicks and optional hotkey marks, then hands the rest of the pipeline
+the SAME contract capture.py produces — (video_path, {step_id: ActionRecord}) —
+so narrate -> sync -> compose run unchanged.
 
 You drive your own app once; your clicks become the timeline anchors and the
-zoom/highlight source. Windows-only for now (gdigrab + pynput).
+zoom/highlight source. The OS-specific bits (screen grabber + window geometry)
+live behind a per-platform Backend; everything else is shared. macOS additionally
+needs `pyobjc-framework-Quartz` (the `screencap-macos` extra) and the user must
+grant Screen Recording + Input Monitoring permissions.
 
 Run standalone:
     python -m demofoundry.pipeline.screencap --out work --window "FunscriptForge"
@@ -20,7 +23,9 @@ from __future__ import annotations
 
 import ctypes
 import json
+import re
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,65 +35,32 @@ from ..models import ActionRecord, Rect, Step
 
 @dataclass
 class CaptureGeometry:
-    """Screen rect being recorded, in absolute desktop pixels. Clicks are logged
-    in absolute coords and translated to video-local coords by subtracting the
-    origin, so zoom/highlight land in the right place in the recording."""
+    """Screen rect being recorded, in absolute desktop PIXELS (x, y, width,
+    height match the recording's native pixel space).
+
+    `scale` is pixels-per-point — 1.0 on Windows (DPI-aware) and the Retina
+    factor on macOS (e.g. 2.0). pynput reports clicks in points, so `to_local`
+    multiplies by `scale` to land them in the recording's pixel space, then
+    subtracts the origin so zoom/highlight sit in the right place."""
 
     x: int
     y: int
     width: int
     height: int
+    scale: float = 1.0
 
     def to_local(self, sx: float, sy: float) -> tuple[float, float]:
-        return (sx - self.x, sy - self.y)
+        return (sx * self.scale - self.x, sy * self.scale - self.y)
 
 
 def _even(n: int) -> int:
     return n - (n % 2)  # yuv420p needs even dimensions
 
 
-def primary_monitor() -> CaptureGeometry:
-    user32 = ctypes.windll.user32
-    user32.SetProcessDPIAware()
-    w = user32.GetSystemMetrics(0)  # SM_CXSCREEN
-    h = user32.GetSystemMetrics(1)  # SM_CYSCREEN
-    return CaptureGeometry(0, 0, _even(w), _even(h))
-
-
-def window_geometry(title: str) -> CaptureGeometry | None:
-    """Screen rect of a top-level window by (substring of) its title, or None."""
-    user32 = ctypes.windll.user32
-    user32.SetProcessDPIAware()
-    found: list[int] = []
-
-    # Exact match first; fall back to substring scan over visible windows.
-    hwnd = user32.FindWindowW(None, title)
-    if hwnd:
-        found.append(hwnd)
-    else:
-        EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-        def _cb(h, _l):
-            if not user32.IsWindowVisible(h):
-                return True
-            n = user32.GetWindowTextLengthW(h)
-            if n:
-                buf = ctypes.create_unicode_buffer(n + 1)
-                user32.GetWindowTextW(h, buf, n + 1)
-                if title.lower() in buf.value.lower():
-                    found.append(h)
-                    return False
-            return True
-
-        user32.EnumWindows(EnumProc(_cb), 0)
-
-    if not found:
-        return None
-    rect = _RECT()
-    user32.GetWindowRect(found[0], ctypes.byref(rect))
-    return CaptureGeometry(
-        rect.left, rect.top, _even(rect.right - rect.left), _even(rect.bottom - rect.top)
-    )
+# --- Platform backends -------------------------------------------------------
+# The screen grabber, monitor/window geometry, and the ffmpeg capture flags are
+# the ONLY OS-specific pieces. Each backend supplies them; Recorder, to_records,
+# the HTTP endpoints, and the whole UI are platform-agnostic.
 
 
 class _RECT(ctypes.Structure):
@@ -96,16 +68,192 @@ class _RECT(ctypes.Structure):
                 ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
 
 
+class _Backend:
+    """Per-OS capture primitives."""
+
+    def primary_monitor(self) -> CaptureGeometry:
+        raise NotImplementedError
+
+    def window_geometry(self, title: str) -> CaptureGeometry | None:
+        raise NotImplementedError
+
+    def capture_args(self, geo: CaptureGeometry, fps: int) -> tuple[list[str], str | None]:
+        """ffmpeg args through `-i <input>`, plus an optional `-vf` crop filter."""
+        raise NotImplementedError
+
+
+class _WindowsBackend(_Backend):
+    """gdigrab + Win32. gdigrab crops on input (offset/video_size) — no filter."""
+
+    def primary_monitor(self) -> CaptureGeometry:
+        user32 = ctypes.windll.user32
+        user32.SetProcessDPIAware()
+        w = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+        h = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+        return CaptureGeometry(0, 0, _even(w), _even(h))
+
+    def window_geometry(self, title: str) -> CaptureGeometry | None:
+        user32 = ctypes.windll.user32
+        user32.SetProcessDPIAware()
+        found: list[int] = []
+        # Exact match first; fall back to substring scan over visible windows.
+        hwnd = user32.FindWindowW(None, title)
+        if hwnd:
+            found.append(hwnd)
+        else:
+            EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+            def _cb(h, _l):
+                if not user32.IsWindowVisible(h):
+                    return True
+                n = user32.GetWindowTextLengthW(h)
+                if n:
+                    buf = ctypes.create_unicode_buffer(n + 1)
+                    user32.GetWindowTextW(h, buf, n + 1)
+                    if title.lower() in buf.value.lower():
+                        found.append(h)
+                        return False
+                return True
+
+            user32.EnumWindows(EnumProc(_cb), 0)
+        if not found:
+            return None
+        rect = _RECT()
+        user32.GetWindowRect(found[0], ctypes.byref(rect))
+        return CaptureGeometry(
+            rect.left, rect.top, _even(rect.right - rect.left), _even(rect.bottom - rect.top)
+        )
+
+    def capture_args(self, geo: CaptureGeometry, fps: int) -> tuple[list[str], str | None]:
+        return (
+            ["-f", "gdigrab", "-framerate", str(fps),
+             "-offset_x", str(geo.x), "-offset_y", str(geo.y),
+             "-video_size", f"{geo.width}x{geo.height}", "-i", "desktop"],
+            None,
+        )
+
+
+class _MacBackend(_Backend):
+    """avfoundation + Quartz.
+
+    NOT YET RUN ON A MAC — three things need verification on real hardware:
+      1. the avfoundation screen-capture device INDEX (parsed from -list_devices),
+      2. the points<->pixels (Retina) `scale` and whether pynput reports points,
+      3. the window-bounds origin (Cocoa vs top-left) — kCGWindowBounds is
+         documented top-left, but confirm clicks line up.
+    avfoundation can't crop on input, so we grab the whole display and crop with
+    a `-vf` filter (in pixels). Requires pyobjc + Screen Recording / Input
+    Monitoring permissions granted by the user.
+    """
+
+    _screen_idx: int | None = None
+
+    def _quartz(self):
+        try:
+            import Quartz  # from pyobjc-framework-Quartz
+        except ImportError as e:  # pragma: no cover - mac only
+            raise RuntimeError(
+                "macOS screen capture needs pyobjc — install the 'screencap-macos' "
+                "extra: pip install -e '.[screencap-macos]'."
+            ) from e
+        return Quartz
+
+    def _main_scale(self, Q) -> float:
+        did = Q.CGMainDisplayID()
+        bounds = Q.CGDisplayBounds(did)
+        px_w = Q.CGDisplayPixelsWide(did)
+        return (px_w / bounds.size.width) if bounds.size.width else 1.0
+
+    def primary_monitor(self) -> CaptureGeometry:
+        Q = self._quartz()
+        did = Q.CGMainDisplayID()
+        bounds = Q.CGDisplayBounds(did)
+        px_w, px_h = Q.CGDisplayPixelsWide(did), Q.CGDisplayPixelsHigh(did)
+        scale = (px_w / bounds.size.width) if bounds.size.width else 1.0
+        return CaptureGeometry(0, 0, _even(int(px_w)), _even(int(px_h)), scale)
+
+    def window_geometry(self, title: str) -> CaptureGeometry | None:
+        Q = self._quartz()
+        scale = self._main_scale(Q)
+        wins = Q.CGWindowListCopyWindowInfo(
+            Q.kCGWindowListOptionOnScreenOnly, Q.kCGNullWindowID
+        )
+        for w in wins or []:
+            owner = w.get("kCGWindowOwnerName", "") or ""
+            name = w.get("kCGWindowName", "") or ""
+            if title.lower() in f"{owner} {name}".lower():
+                b = w.get("kCGWindowBounds")
+                if not b:
+                    continue
+                # kCGWindowBounds is in points; scale to pixels for the crop.
+                return CaptureGeometry(
+                    int(b["X"] * scale), int(b["Y"] * scale),
+                    _even(int(b["Width"] * scale)), _even(int(b["Height"] * scale)),
+                    scale,
+                )
+        return None
+
+    def _screen_index(self) -> int:
+        if self._screen_idx is not None:
+            return self._screen_idx
+        # Parse `ffmpeg -f avfoundation -list_devices true -i ""` for the
+        # "Capture screen 0" device and use its bracketed index.
+        out = subprocess.run(
+            ["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+            capture_output=True, text=True,
+        ).stderr
+        idx = 0
+        for line in out.splitlines():
+            m = re.search(r"\[(\d+)\]\s+Capture screen", line)
+            if m:
+                idx = int(m.group(1))
+                break
+        self._screen_idx = idx
+        return idx
+
+    def capture_args(self, geo: CaptureGeometry, fps: int) -> tuple[list[str], str | None]:
+        idx = self._screen_index()
+        inp = ["-f", "avfoundation", "-capture_cursor", "1",
+               "-framerate", str(fps), "-i", str(idx)]  # video only (no audio device)
+        # avfoundation grabs the whole display (pixels); crop to the region.
+        vf = f"crop={_even(geo.width)}:{_even(geo.height)}:{geo.x}:{geo.y}"
+        return inp, vf
+
+
+_BACKEND: _Backend | None = None
+
+
+def _backend() -> _Backend:
+    global _BACKEND
+    if _BACKEND is None:
+        if sys.platform == "darwin":
+            _BACKEND = _MacBackend()
+        elif sys.platform == "win32":
+            _BACKEND = _WindowsBackend()
+        else:
+            raise RuntimeError(
+                f"Screen capture supports Windows and macOS, not {sys.platform!r} "
+                "(Linux x11grab/PipeWire is a future backend)."
+            )
+    return _BACKEND
+
+
+def primary_monitor() -> CaptureGeometry:
+    return _backend().primary_monitor()
+
+
+def window_geometry(title: str) -> CaptureGeometry | None:
+    """Screen rect of a top-level window by (substring of) its title, or None."""
+    return _backend().window_geometry(title)
+
+
 def _ffmpeg_cmd(geo: CaptureGeometry, out: Path, fps: int) -> list[str]:
-    return [
-        "ffmpeg", "-y",
-        "-f", "gdigrab", "-framerate", str(fps),
-        "-offset_x", str(geo.x), "-offset_y", str(geo.y),
-        "-video_size", f"{geo.width}x{geo.height}",
-        "-i", "desktop",
-        "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast",
-        str(out),
-    ]
+    input_args, vf = _backend().capture_args(geo, fps)
+    cmd = ["ffmpeg", "-y", *input_args]
+    if vf:
+        cmd += ["-vf", vf]
+    cmd += ["-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast", str(out)]
+    return cmd
 
 
 def resolve_geometry(

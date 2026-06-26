@@ -26,7 +26,9 @@ Both paths produce the same recording + per-scene marks and feed the same render
 
 - **ffmpeg** on `PATH` (already needed for compose) — provides the screen grabber (`gdigrab`).
 - **pynput** for the global input hook: `pip install -e ".[screencap]"` (or `".[all]"`).
-- **Windows** (the grabber is `gdigrab`; macOS/Linux backends are not wired yet).
+- **Windows** today (the grabber is `gdigrab`). A **macOS** backend (avfoundation + Quartz) is
+  written but needs testing on a Mac — see [Screen capture on macOS](../architecture/screen-capture-macos.md).
+  Linux is a future backend.
 - `ELEVENLABS_API_KEY` in `.env` for narration (otherwise you get silent clips).
 
 ## Record and render in one command

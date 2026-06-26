@@ -45,7 +45,8 @@ def init() -> None:
                 reference TEXT,
                 audio_script TEXT,
                 pronunciations TEXT,
-                progress TEXT
+                progress TEXT,
+                capture_mode TEXT DEFAULT 'web'
             )"""
         )
         # Migrate older DBs that predate later columns.
@@ -60,6 +61,8 @@ def init() -> None:
             c.execute("ALTER TABLE projects ADD COLUMN pronunciations TEXT")
         if "progress" not in cols:
             c.execute("ALTER TABLE projects ADD COLUMN progress TEXT")
+        if "capture_mode" not in cols:
+            c.execute("ALTER TABLE projects ADD COLUMN capture_mode TEXT DEFAULT 'web'")
 
 
 def create(project: dict) -> None:

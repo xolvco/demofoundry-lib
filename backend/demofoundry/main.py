@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from . import config, render, store, voices as voices_api
 from .pipeline import inspect as inspect_api
 from .pipeline import scripting as scripting_api
+from .pipeline import screencap as screencap_api
 
 app = FastAPI(title="DemoFoundry", version="0.1.0")
 STATIC = Path(__file__).resolve().parent / "static"
@@ -262,3 +263,102 @@ def get_srt(pid: str) -> FileResponse:
     if not p or not p.get("srt_path"):
         raise HTTPException(404, "no subtitles yet")
     return FileResponse(p["srt_path"], media_type="application/x-subrip")
+
+
+# --- Screen capture (desktop apps) -------------------------------------------
+# The backend runs locally, so it can host the recorder itself. One active
+# recorder per project. Times cross the API boundary in milliseconds (to match
+# forgemoment + the funscript world); on disk events.json stays in seconds.
+_recorders: dict[str, screencap_api.Recorder] = {}
+
+
+def _screencap_dir(pid: str) -> Path:
+    return store.asset_dir(pid) / "screencap"
+
+
+def _events_to_ms(ev: dict) -> dict:
+    return {
+        "duration_ms": int(ev.get("duration", 0) * 1000),
+        "size": ev.get("size", [0, 0]),
+        "marks_ms": [int(t * 1000) for t in ev.get("marks", [])],
+        "clicks": [
+            {"t_ms": int(c["t"] * 1000), "x": c["x"], "y": c["y"]}
+            for c in ev.get("clicks", [])
+        ],
+    }
+
+
+class RecordStartIn(BaseModel):
+    window: str | None = None  # capture this window (title substring); else primary monitor
+
+
+@app.post("/api/projects/{pid}/record/start")
+def record_start(pid: str, body: RecordStartIn) -> dict:
+    p = store.get(pid)
+    if not p:
+        raise HTTPException(404, "project not found")
+    if pid in _recorders and _recorders[pid].status()["recording"]:
+        raise HTTPException(409, "already recording this project")
+    try:
+        geo = screencap_api.resolve_geometry(window_title=body.window)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    rec = screencap_api.Recorder(_screencap_dir(pid), geo)
+    rec.start()
+    _recorders[pid] = rec
+    store.update(pid, capture_mode="desktop")
+    return {"window": body.window, "size": [geo.width, geo.height], **rec.status()}
+
+
+@app.get("/api/projects/{pid}/record/status")
+def record_status(pid: str) -> dict:
+    rec = _recorders.get(pid)
+    return rec.status() if rec else {"recording": False, "elapsed": 0, "clicks": 0, "marks": 0}
+
+
+@app.post("/api/projects/{pid}/record/mark")
+def record_mark(pid: str) -> dict:
+    rec = _recorders.get(pid)
+    if not rec or not rec.status()["recording"]:
+        raise HTTPException(409, "not recording")
+    rec.mark()
+    return rec.status()
+
+
+@app.post("/api/projects/{pid}/record/stop")
+def record_stop(pid: str) -> dict:
+    rec = _recorders.pop(pid, None)
+    if not rec:
+        raise HTTPException(409, "not recording")
+    return _events_to_ms(rec.stop())  # full events.json is on disk
+
+
+@app.get("/api/projects/{pid}/recording")
+def get_recording(pid: str) -> FileResponse:
+    path = _screencap_dir(pid) / "recording.mp4"
+    if not path.exists():
+        raise HTTPException(404, "no recording yet")
+    return FileResponse(str(path), media_type="video/mp4")  # Starlette serves Range
+
+
+@app.get("/api/projects/{pid}/events")
+def get_events(pid: str) -> dict:
+    path = _screencap_dir(pid) / "events.json"
+    if not path.exists():
+        raise HTTPException(404, "no recording yet")
+    return _events_to_ms(json.loads(path.read_text(encoding="utf-8")))
+
+
+class MarksIn(BaseModel):
+    marks_ms: list[float]  # scene boundaries in milliseconds, from the marking UI
+
+
+@app.put("/api/projects/{pid}/marks")
+def put_marks(pid: str, body: MarksIn) -> dict:
+    path = _screencap_dir(pid) / "events.json"
+    if not path.exists():
+        raise HTTPException(404, "no recording yet")
+    ev = json.loads(path.read_text(encoding="utf-8"))
+    ev["marks"] = sorted(m / 1000.0 for m in body.marks_ms)  # store seconds on disk
+    path.write_text(json.dumps(ev, indent=2), encoding="utf-8")
+    return {"marks_ms": [int(t * 1000) for t in ev["marks"]]}

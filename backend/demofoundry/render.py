@@ -11,6 +11,7 @@ re-driving the browser.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 from typing import Callable
@@ -193,20 +194,31 @@ async def run(pid: str) -> None:
             },
         )
 
+    common = dict(
+        # New stage clears the per-scene sub-message so it never shows stale.
+        on_status=lambda s: store.update(pid, status=s, progress=""),
+        on_records=save_results,
+        on_progress=lambda m: store.update(pid, progress=m),
+        pronunciations=project.get("pronunciations") or {},
+    )
     try:
         store.update(pid, status="capturing", error=None, progress="")
         store.set_step_results(pid, {})  # clear any prior run's results
-        video, srt = await render_to_files(
-            project["target_url"],
-            steps,
-            store.asset_dir(pid),
-            project.get("voice_id") or "default",
-            # New stage clears the per-scene sub-message so it never shows stale.
-            on_status=lambda s: store.update(pid, status=s, progress=""),
-            on_records=save_results,
-            on_progress=lambda m: store.update(pid, progress=m),
-            pronunciations=project.get("pronunciations") or {},
-        )
+        if project.get("capture_mode") == "desktop":
+            # Desktop: render from the recording the user made, not a live drive.
+            events_path = store.asset_dir(pid) / "screencap" / "events.json"
+            if not events_path.exists():
+                raise RuntimeError("No recording yet — record a walkthrough first.")
+            events = json.loads(events_path.read_text(encoding="utf-8"))
+            video, srt = await render_screencap_to_files(
+                events, steps, store.asset_dir(pid),
+                project.get("voice_id") or "default", **common,
+            )
+        else:
+            video, srt = await render_to_files(
+                project["target_url"], steps, store.asset_dir(pid),
+                project.get("voice_id") or "default", **common,
+            )
         store.update(pid, status="done", video_path=str(video), srt_path=str(srt), progress="")
     except Exception as exc:  # surface failures to the UI
         store.update(pid, status="error", error=str(exc))

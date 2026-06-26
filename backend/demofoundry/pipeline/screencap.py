@@ -108,6 +108,156 @@ def _ffmpeg_cmd(geo: CaptureGeometry, out: Path, fps: int) -> list[str]:
     ]
 
 
+def resolve_geometry(
+    window_title: str | None = None, geometry: CaptureGeometry | None = None
+) -> CaptureGeometry:
+    """Pick the capture rect: explicit geometry > named window > primary monitor."""
+    if geometry is not None:
+        return geometry
+    if window_title:
+        geo = window_geometry(window_title)
+        if geo is None:
+            raise RuntimeError(f"No visible window matching {window_title!r}.")
+        return geo
+    return primary_monitor()
+
+
+class Recorder:
+    """A start/stop screen-recording session the web layer can drive.
+
+    Unlike `record()` (which blocks until Esc, for the CLI), this exposes
+    start(), status(), and stop() so an HTTP endpoint can begin a recording,
+    poll it, and end it on a button press — recording the screen with gdigrab
+    (video only, no audio) while a pynput hook logs clicks + F9 marks.
+    """
+
+    def __init__(
+        self,
+        out_dir: Path,
+        geometry: CaptureGeometry,
+        fps: int = 15,
+        mark_key: str = "f9",
+    ) -> None:
+        self.out_dir = Path(out_dir)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.video = self.out_dir / "recording.mp4"
+        self.geo = geometry
+        self.fps = fps
+        self.mark_key = mark_key
+        self.clicks: list[dict] = []
+        self.marks: list[float] = []
+        self._proc: subprocess.Popen | None = None
+        self._ml = None
+        self._kl = None
+        self._t0: float | None = None
+        self._duration = 0.0
+        self._stopped = False
+        import threading
+
+        self.esc_event = threading.Event()  # set if the user hits Esc
+
+    def start(self) -> None:
+        from pynput import keyboard, mouse
+
+        self._proc = subprocess.Popen(
+            _ffmpeg_cmd(self.geo, self.video, self.fps),
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1.0)  # let gdigrab spin up before the clock starts
+        self._t0 = time.monotonic()
+        self._ml = mouse.Listener(on_click=self._on_click)
+        self._kl = keyboard.Listener(on_press=self._on_press)
+        self._ml.start()
+        self._kl.start()
+
+    def _now(self) -> float:
+        return (time.monotonic() - self._t0) if self._t0 is not None else 0.0
+
+    def _on_click(self, x, y, button, pressed) -> None:
+        if pressed and self._t0 is not None:
+            lx, ly = self.geo.to_local(x, y)
+            self.clicks.append({"t": self._now(), "x": lx, "y": ly})
+
+    def _on_press(self, key) -> None:
+        from pynput import keyboard
+
+        name = getattr(key, "char", None) or getattr(key, "name", None)
+        if name == self.mark_key:
+            self.mark()
+        elif key == keyboard.Key.esc:
+            self.esc_event.set()
+
+    def mark(self) -> float:
+        """Drop a scene mark at the current time (F9 or an API call). Returns it."""
+        t = self._now()
+        self.marks.append(t)
+        return t
+
+    def status(self) -> dict:
+        return {
+            "recording": self._proc is not None and not self._stopped,
+            "elapsed": round(self._now(), 2),
+            "clicks": len(self.clicks),
+            "marks": len(self.marks),
+            "esc": self.esc_event.is_set(),
+        }
+
+    def events(self) -> dict:
+        return {
+            "duration": self._duration,
+            "origin": [self.geo.x, self.geo.y],
+            "size": [self.geo.width, self.geo.height],
+            "clicks": self.clicks,
+            "marks": self.marks,
+            "video": str(self.video),
+        }
+
+    def stop(self) -> dict:
+        """End the recording, finalize the file, write events.json, return it."""
+        if self._stopped:
+            return self.events()
+        self._duration = self._now()
+        if self._ml:
+            self._ml.stop()
+        if self._kl:
+            self._kl.stop()
+        # Ask ffmpeg to finalize cleanly (q on stdin), then fall back to terminate.
+        if self._proc:
+            try:
+                self._proc.stdin.write(b"q")
+                self._proc.stdin.flush()
+                self._proc.wait(timeout=5)
+            except Exception:
+                self._proc.terminate()
+                try:
+                    self._proc.wait(timeout=5)
+                except Exception:
+                    self._proc.kill()
+        self._faststart()
+        self._stopped = True
+        ev = self.events()
+        (self.out_dir / "events.json").write_text(json.dumps(ev, indent=2), encoding="utf-8")
+        return ev
+
+    def _faststart(self) -> None:
+        """Remux so the moov atom is at the front — lets a browser <video> seek
+        immediately instead of waiting for the whole file. A fast -c copy pass."""
+        if not self.video.exists():
+            return
+        tmp = self.video.with_suffix(".faststart.mp4")
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(self.video), "-c", "copy",
+                 "-movflags", "+faststart", str(tmp)],
+                check=True, capture_output=True,
+            )
+            if tmp.exists() and tmp.stat().st_size > 0:
+                tmp.replace(self.video)
+        except Exception:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)  # keep the original on failure
+
+
 def record(
     out_dir: Path,
     window_title: str | None = None,
@@ -116,91 +266,19 @@ def record(
     mark_key: str = "f9",
     verbose: bool = True,
 ) -> dict:
-    """Record the screen until Esc, logging clicks + F9 marks against the clock.
-
-    Returns the events dict (also written to events.json) and writes recording.mp4.
-    """
-    from pynput import keyboard, mouse
-
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    video = out_dir / "recording.mp4"
-
-    geo = geometry
-    if geo is None and window_title:
-        geo = window_geometry(window_title)
-        if geo is None:
-            raise RuntimeError(f"No visible window matching {window_title!r}.")
-    if geo is None:
-        geo = primary_monitor()
-
+    """CLI recorder: record until Esc, logging clicks + F9 marks. Returns events."""
+    geo = resolve_geometry(window_title, geometry)
     if verbose:
         print(f"[screencap] recording {geo.width}x{geo.height} at ({geo.x},{geo.y})")
         print(f"[screencap]  - press {mark_key.upper()} at each new narration beat")
         print("[screencap]  - press Esc to stop")
-
-    proc = subprocess.Popen(
-        _ffmpeg_cmd(geo, video, fps),
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    time.sleep(1.0)  # let gdigrab spin up before we start the clock
-    t0 = time.monotonic()
-
-    clicks: list[dict] = []
-    marks: list[float] = []
-    stop = {"flag": False}
-
-    def on_click(x, y, button, pressed):
-        if pressed:
-            lx, ly = geo.to_local(x, y)
-            clicks.append({"t": time.monotonic() - t0, "x": lx, "y": ly})
-
-    def on_press(key):
-        try:
-            name = key.char
-        except AttributeError:
-            name = getattr(key, "name", None)
-        if name == mark_key:
-            t = time.monotonic() - t0
-            marks.append(t)
-            if verbose:
-                print(f"[screencap]  mark {len(marks)} @ {t:.1f}s")
-        elif key == keyboard.Key.esc:
-            stop["flag"] = True
-            return False  # stop the keyboard listener
-
-    ml = mouse.Listener(on_click=on_click)
-    kl = keyboard.Listener(on_press=on_press)
-    ml.start()
-    kl.start()
-    kl.join()  # blocks until Esc
-    ml.stop()
-    duration = time.monotonic() - t0
-
-    # Ask ffmpeg to finalize the file cleanly (q on stdin), then fall back to term.
-    try:
-        proc.stdin.write(b"q")
-        proc.stdin.flush()
-        proc.wait(timeout=5)
-    except Exception:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-
-    events = {
-        "duration": duration,
-        "origin": [geo.x, geo.y],
-        "size": [geo.width, geo.height],
-        "clicks": clicks,
-        "marks": marks,
-        "video": str(video),
-    }
-    (out_dir / "events.json").write_text(json.dumps(events, indent=2), encoding="utf-8")
+    rec = Recorder(out_dir, geo, fps, mark_key)
+    rec.start()
+    rec.esc_event.wait()  # block until the user presses Esc
+    events = rec.stop()
     if verbose:
-        print(f"[screencap] done: {duration:.1f}s, {len(clicks)} clicks, "
-              f"{len(marks)} marks -> {video}")
+        print(f"[screencap] done: {events['duration']:.1f}s, {len(events['clicks'])} "
+              f"clicks, {len(events['marks'])} marks -> {events['video']}")
     return events
 
 

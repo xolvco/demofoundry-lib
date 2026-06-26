@@ -49,15 +49,37 @@ it explicitly. That's exactly what
 If a scene narrates a screen you can't reach with a plain selector, that's the tell: you need a
 `navigate` (often with an id) to get there.
 
-## Two capture facts that trip people up
+## Highlights and zooms that read well
 
-1. **The recording is viewport-only.** Anything below the fold isn't filmed. If you `highlight`
-   or `zoom` something far down the page (e.g. a control under a long list), DemoFoundry now
-   **scrolls it into view** before recording — but only if you name it as the scene's
-   `highlight_target`/`zoom_target`. Name the thing you want seen.
-2. **Don't `zoom_target` a tiny element.** Zoom crops to that element, so a small heading blows up
-   and pixelates. Zoom a **container** (a panel, a card), or skip zoom and just use `highlight_target`
-   — the highlight box and click marker already direct the eye.
+Each scene can draw a **highlight** box on `highlight_target`, a **click marker** where it clicked,
+and **zoom** in on `zoom_target`. Used well they direct the eye; used carelessly they look like
+glitches. Four things to get right:
+
+1. **The recording is viewport-only.** Anything below the fold isn't filmed. DemoFoundry now
+   **scrolls** the scene's `highlight_target`/`zoom_target` into view before recording — but only the
+   one you name. Name the thing you want seen.
+
+2. **Zoom a container, not a tiny element — or don't zoom at all.** `zoom_target` crops tightly to
+   whatever you name, so a single button or one line of text fills the whole screen: pixelated and
+   stripped of context. Point zoom at the surrounding **panel, card, or section** so the viewer still
+   sees where they are. Better yet, for plain emphasis use `highlight_target` (it keeps the full
+   screen) and reserve `zoom` for details too small to read otherwise.
+
+3. **Only highlight something that's still on the screen the scene settles on.** The box is drawn at
+   the element's captured position. If that element **moves, disappears, or you navigate away** in the
+   same scene, the box ends up hovering over empty space or unrelated content — it reads as an error.
+   Highlight the thing you just acted on (it's still there), not something transient, and don't put a
+   highlight on a scene whose action navigates to a different screen.
+
+4. **One target per scene.** A highlight and a zoom on the same scene fight each other. Pick the one
+   that tells the story.
+
+??? example "The two glitches users hit most"
+    - *Zoom too tight:* `zoom_target: "text=Pacing"` crops to the word "Pacing" — huge and blurry.
+      Fix: drop the zoom and `highlight_target` the **Pacing panel**, or zoom the panel, not the word.
+    - *Stray box:* a scene navigates to a new screen but still carries a `highlight_target` from the
+      old one — the yellow box floats over the new page. Fix: remove the highlight, or highlight an
+      element that's actually on the screen the scene lands on.
 
 ## Debug a script in 30 seconds
 
@@ -92,6 +114,59 @@ A good repair prompt:
 > screen we're describing.
 
 That single instruction fixes the most common class of failure — the one in the example above.
+
+### A copy-ready prompt (every rule baked in)
+
+This is the prompt that produces scripts like the ones in [sample scripts](../sample-scripts/README.md)
+— including the fixes above (narration matches footage, no stray boxes, no over-tight zooms). Fill in
+the **bracketed** parts and paste it to Claude:
+
+```text
+You are writing a DemoFoundry script — a steps.json that drives a web app with Playwright and
+narrates each scene. Output ONLY a JSON object of this shape:
+
+  { "name": "...", "target_url": "[APP URL]",
+    "steps": [ { "action": ..., "target": ..., "value": ..., "zoom_target": ...,
+                 "highlight_target": ..., "narration_text": "..." } ] }
+
+Actions: navigate | click | type | keypress | wait.
+  - navigate: value = path or URL (relative paths resolve against target_url).
+  - click / type: target = a Playwright selector; type also needs value (the text).
+  - wait: value = milliseconds.
+
+App: [APP NAME] at [APP URL].
+Goal: [ONE-SENTENCE GOAL, e.g. "a 60-second tour of the invoicing flow"].
+Screens & selectors you may use (use these verbatim; do not invent selectors):
+  [PASTE REAL SELECTORS / ROUTES — e.g. text=New demo, button:has-text("Web app"),
+   #name, #target, text=Reset to sample, /voice?id=__PROJECT_ID__, ...]
+
+Follow these rules exactly:
+1. Each scene's narration must describe ONLY what that scene's action puts on screen. The frame the
+   viewer holds is the RESULT of the action.
+2. To talk about a screen, navigate or click TO it in that same scene. Screens that need a record
+   (e.g. the Voice screen) require their id: /voice?id=__PROJECT_ID__.
+3. Never click Back, Cancel, or Close in a scene that describes where you're going — that returns to a
+   previous screen and the footage won't match the words. To end, hold on the current screen with a
+   `wait` and describe the next steps as what comes next.
+4. For emphasis prefer highlight_target — it keeps the whole screen visible. Use zoom_target ONLY for
+   detail too small to read, and always point it at a CONTAINING panel / card / section, never a bare
+   button or single line of text (tight zooms pixelate and lose context). At most one of
+   highlight_target / zoom_target per scene.
+5. Only set highlight_target / zoom_target to an element that is still on the screen the scene settles
+   on. Never highlight something that moves, disappears, or that you navigate away from — the box will
+   hover over empty space and look like an error. Usually: highlight the element you just acted on.
+6. Prefer stable selectors: text=…, role=…, or data-testid. One element each.
+7. Keep each narration line about as long as the action is worth showing; linger where there's
+   something to see, and write in a warm, plain, spoken voice.
+
+Write [N] scenes that accomplish the goal.
+```
+
+!!! tip "Why this prompt works"
+    Rules 1–3 keep narration and footage in sync (no "talking about the Voice screen while showing the
+    Library"). Rules 4–5 stop the two visual glitches — pixelated over-zooms and highlight boxes
+    stranded over content that's gone. The DemoFoundry feature-tour and self-demo samples were written
+    with exactly this prompt.
 
 See also the [sample scripts](../sample-scripts/README.md) (working, copy-ready examples) and the
 [CLI guide](cli.md) for the step-file reference.

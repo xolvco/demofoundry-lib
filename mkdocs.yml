@@ -28,6 +28,7 @@ nav:
       - Overview: guide/overview.md
       - CLI: guide/cli.md
       - Screen capture (desktop): guide/screen-capture.md
+      - PowerPoint → video: guide/powerpoint.md
       - Writing scripts that succeed: guide/writing-scripts.md
       - Sample scripts: sample-scripts/README.md
       - Library: guide/library.md

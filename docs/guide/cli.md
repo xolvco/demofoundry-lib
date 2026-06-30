@@ -114,4 +114,5 @@ A step list is a JSON array. Selectors are Playwright locators (prefer `data-tes
 | `sync` | Build the time-remap plan (the sync engine). |
 | `compose` | Render the plan to MP4 and write the SRT. |
 | `render` | Run the whole pipeline. |
+| `ingest-pptx` | Turn a PowerPoint into a narratable deck — see [PowerPoint → video](powerpoint.md). |
 | `serve` | Launch the [local web app](../architecture/mvp.md). |

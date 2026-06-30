@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from pydantic import BaseModel
 
 from . import config, render, store, voices as voices_api
 from .pipeline import inspect as inspect_api
+from .pipeline import pptx_ingest as pptx_api
 from .pipeline import scripting as scripting_api
 from .pipeline import screencap as screencap_api
 
@@ -95,6 +97,58 @@ def health() -> dict:
         "anthropic_key": bool(config.ANTHROPIC_API_KEY),
         "elevenlabs_key": bool(config.ELEVENLABS_API_KEY),
     }
+
+
+@app.get("/api/capabilities")
+def capabilities() -> dict:
+    """Optional capabilities the UI can gate on (e.g. disable the PowerPoint
+    button when PowerPoint isn't installed on this machine)."""
+    return {"pptx": pptx_api.powerpoint_available()}
+
+
+@app.post("/api/ingest-pptx")
+def ingest_pptx(file: UploadFile = File(...), narrate: bool = Form(True)) -> dict:
+    """Import a PowerPoint: export its slides, write narration (speaker notes →
+    else Claude), and create a project that renders the slides as a video.
+
+    Returns the new project's id so the UI can jump straight to the Voice screen.
+    Sync def → FastAPI runs it off the event loop (slide export + Claude take a
+    bit). Requires PowerPoint (alpha).
+    """
+    if not pptx_api.powerpoint_available():
+        raise HTTPException(400, "PowerPoint isn't installed on this machine — required to import .pptx files.")
+    if not (file.filename or "").lower().endswith((".pptx", ".ppt")):
+        raise HTTPException(400, "Please upload a .pptx file.")
+
+    pid = uuid.uuid4().hex[:12]
+    asset = store.asset_dir(pid)
+    # Save under the original (sanitized) filename so the deck title / project
+    # name comes from it — pptx_ingest derives the name from the file stem.
+    safe = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(file.filename or "Presentation.pptx").name)
+    if not safe.lower().endswith((".pptx", ".ppt")):
+        safe += ".pptx"
+    src = asset / safe
+    src.write_bytes(file.file.read())
+    try:
+        info = pptx_api.ingest(src, asset / "deck", narrate=narrate)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # COM / export failures
+        raise HTTPException(500, f"PowerPoint import failed: {e}")
+
+    data = json.loads(Path(info["steps"]).read_text(encoding="utf-8"))
+    steps = []
+    for i, s in enumerate(data.get("steps", [])):
+        s["id"] = s.get("id") or f"s{i + 1}"
+        steps.append(s)
+    store.create(
+        {
+            "id": pid, "name": data.get("name", pid), "target_url": data["target_url"],
+            "description": "", "reference": "", "audio_script": "",
+            "pronunciations": {}, "voice_id": "", "capture_mode": "web", "steps": steps,
+        }
+    )
+    return {"id": pid, "name": data.get("name", pid), "slides": info["slides"]}
 
 
 @app.get("/api/voices")

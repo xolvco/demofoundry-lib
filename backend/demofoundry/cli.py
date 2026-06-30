@@ -112,6 +112,21 @@ def _cmd_render(args) -> int:
     return 0
 
 
+def _cmd_ingest_pptx(args) -> int:
+    from .pipeline import pptx_ingest
+
+    if not pptx_ingest.powerpoint_available():
+        print("error: PowerPoint not found — required to ingest .pptx (alpha).", file=sys.stderr)
+        return 2
+    info = pptx_ingest.ingest(Path(args.pptx), Path(args.out_dir), narrate=not args.no_narrate)
+    print(f"slides:  {info['slides']}  (speaker notes on {info['notes_found']})")
+    print(f"deck:    {info['deck_html']}")
+    print(f"steps:   {info['steps']}")
+    print("next:    demofoundry render --url \"%s\" --steps \"%s\" --out-dir <dir> --voice <id>"
+          % (info["deck_url"], info["steps"]))
+    return 0
+
+
 def _cmd_serve(args) -> int:
     import uvicorn
 
@@ -170,6 +185,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="silent hold (ms) on each new screen before the voice "
                         "starts. Default from config (600).")
     c.set_defaults(func=_cmd_render)
+
+    c = sub.add_parser("ingest-pptx", help="turn a .pptx into a narratable deck (requires PowerPoint)")
+    c.add_argument("pptx", help="path to the .pptx file")
+    c.add_argument("--out-dir", required=True)
+    c.add_argument("--no-narrate", action="store_true",
+                   help="don't call Claude; leave narration to speaker notes / hand-authoring")
+    c.set_defaults(func=_cmd_ingest_pptx)
 
     c = sub.add_parser("serve", help="launch the local web app")
     c.add_argument("--port", type=int, default=8000)

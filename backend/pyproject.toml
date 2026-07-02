@@ -20,10 +20,10 @@ screencap = ["pynput>=1.7"]       # capture (desktop, Windows: gdigrab + input h
 screencap-macos = ["pynput>=1.7", "pyobjc-framework-Quartz>=10.0"]
 ai = ["anthropic>=0.40"]          # scripting
 voice = ["httpx>=0.27"]           # ElevenLabs TTS
-# PowerPoint ingestion: python-pptx reads text/notes (cross-platform); pywin32
-# drives PowerPoint COM to export faithful slide PNGs (Windows + PowerPoint only,
-# alpha). Post-alpha cross-platform fallback: LibreOffice headless soffice.
-pptx = ["python-pptx>=1.0", "pywin32>=306; sys_platform == 'win32'"]
+# PowerPoint ingestion: python-pptx reads text/notes, pywin32 drives PowerPoint
+# COM on Windows, and pypdfium2+raster fallback supports LibreOffice conversion
+# on macOS/Linux.
+pptx = ["python-pptx>=1.0", "pywin32>=306; sys_platform == 'win32'", "pypdfium2>=4.30", "pillow>=10.0"]
 # python-multipart powers the file-upload endpoints (e.g. voice-clone samples).
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "python-multipart>=0.0.9"]
 all = [
@@ -33,6 +33,8 @@ all = [
     "httpx>=0.27",
     "python-pptx>=1.0",
     "pywin32>=306; sys_platform == 'win32'",
+    "pypdfium2>=4.30",
+    "pillow>=10.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "python-multipart>=0.0.9",

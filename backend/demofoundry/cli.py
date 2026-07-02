@@ -116,7 +116,11 @@ def _cmd_ingest_pptx(args) -> int:
     from .pipeline import pptx_ingest
 
     if not pptx_ingest.powerpoint_available():
-        print("error: PowerPoint not found — required to ingest .pptx (alpha).", file=sys.stderr)
+        print(
+            "error: no PPTX export backend found. Install Microsoft PowerPoint "
+            "(Windows) or LibreOffice+soffice with pypdfium2.",
+            file=sys.stderr,
+        )
         return 2
     info = pptx_ingest.ingest(Path(args.pptx), Path(args.out_dir), narrate=not args.no_narrate)
     print(f"slides:  {info['slides']}  (speaker notes on {info['notes_found']})")
@@ -186,7 +190,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "starts. Default from config (600).")
     c.set_defaults(func=_cmd_render)
 
-    c = sub.add_parser("ingest-pptx", help="turn a .pptx into a narratable deck (requires PowerPoint)")
+    c = sub.add_parser("ingest-pptx", help="turn a .pptx into a narratable deck")
     c.add_argument("pptx", help="path to the .pptx file")
     c.add_argument("--out-dir", required=True)
     c.add_argument("--no-narrate", action="store_true",

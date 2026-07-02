@@ -24,6 +24,13 @@ CURATED = [
 ]
 
 
+class VoiceCloneError(RuntimeError):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
 def _fallback() -> list[dict]:
     return [{**v, "preview_url": None, "category": "premade"} for v in CURATED]
 
@@ -41,10 +48,8 @@ def clone_voice(
     NOTE: you must have the speaker's consent to clone their voice; ElevenLabs
     requires you to attest to this.
     """
-    import httpx
-
     if not config.ELEVENLABS_API_KEY:
-        raise RuntimeError("ELEVENLABS_API_KEY is required to clone a voice.")
+        raise VoiceCloneError(400, "ELEVENLABS_API_KEY is required to clone a voice.")
     if not name.strip():
         raise ValueError("A name for the voice is required.")
     if not files:
@@ -58,14 +63,33 @@ def clone_voice(
     if description.strip():
         data["description"] = description.strip()
 
-    resp = httpx.post(
-        "https://api.elevenlabs.io/v1/voices/add",
-        headers={"xi-api-key": config.ELEVENLABS_API_KEY},
-        data=data,
-        files=multipart,
-        timeout=120,
-    )
-    resp.raise_for_status()
+    import httpx
+
+    try:
+        resp = httpx.post(
+            "https://api.elevenlabs.io/v1/voices/add",
+            headers={"xi-api-key": config.ELEVENLABS_API_KEY},
+            data=data,
+            files=multipart,
+            timeout=120,
+        )
+    except httpx.TimeoutException as exc:
+        raise VoiceCloneError(504, "ElevenLabs timed out while cloning the voice.") from exc
+    except httpx.RequestError as exc:
+        raise VoiceCloneError(502, f"Could not reach ElevenLabs: {exc}") from exc
+
+    if resp.status_code >= 400:
+        msg = ""
+        try:
+            body = resp.json()
+            if isinstance(body, dict):
+                msg = str(body.get("detail") or body.get("message") or "")
+        except Exception:
+            msg = ""
+        detail = msg or f"ElevenLabs clone API returned HTTP {resp.status_code}."
+        code = resp.status_code if 400 <= resp.status_code < 500 else 502
+        raise VoiceCloneError(code, detail)
+
     voice_id = resp.json()["voice_id"]
     return {
         "id": voice_id,

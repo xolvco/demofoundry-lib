@@ -27,11 +27,17 @@ app = FastAPI(title="DemoFoundry", version="0.1.0")
 STATIC = Path(__file__).resolve().parent / "static"
 
 # In production the React static export is served from STATIC (same origin, no
-# CORS needed). This allows the Next dev server (localhost:3000) to call the API
-# directly during development.
+# CORS needed). In local development allow localhost/127.0.0.1 on any port, and
+# let callers provide an explicit comma-separated allow-list via env when needed.
+_cors_origins = [
+    s.strip()
+    for s in getattr(config, "CORS_ALLOW_ORIGINS", "").split(",")
+    if s.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -101,8 +107,7 @@ def health() -> dict:
 
 @app.get("/api/capabilities")
 def capabilities() -> dict:
-    """Optional capabilities the UI can gate on (e.g. disable the PowerPoint
-    button when PowerPoint isn't installed on this machine)."""
+    """Optional capabilities the UI can gate on."""
     return {"pptx": pptx_api.powerpoint_available()}
 
 
@@ -113,10 +118,14 @@ def ingest_pptx(file: UploadFile = File(...), narrate: bool = Form(True)) -> dic
 
     Returns the new project's id so the UI can jump straight to the Voice screen.
     Sync def → FastAPI runs it off the event loop (slide export + Claude take a
-    bit). Requires PowerPoint (alpha).
+    bit). Requires a local PPTX export backend (PowerPoint or LibreOffice).
     """
     if not pptx_api.powerpoint_available():
-        raise HTTPException(400, "PowerPoint isn't installed on this machine — required to import .pptx files.")
+        raise HTTPException(
+            400,
+            "No PPTX export backend available. Install Microsoft PowerPoint "
+            "(Windows), or LibreOffice (soffice) plus pypdfium2.",
+        )
     if not (file.filename or "").lower().endswith((".pptx", ".ppt")):
         raise HTTPException(400, "Please upload a .pptx file.")
 
@@ -133,8 +142,8 @@ def ingest_pptx(file: UploadFile = File(...), narrate: bool = Form(True)) -> dic
         info = pptx_api.ingest(src, asset / "deck", narrate=narrate)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
-    except Exception as e:  # COM / export failures
-        raise HTTPException(500, f"PowerPoint import failed: {e}")
+    except Exception as e:  # COM / LibreOffice export failures
+        raise HTTPException(500, f"PPTX import failed: {e}")
 
     data = json.loads(Path(info["steps"]).read_text(encoding="utf-8"))
     steps = []
@@ -173,6 +182,8 @@ async def clone_voice(
         return voices_api.clone_voice(name, blobs)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except voices_api.VoiceCloneError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Voice clone failed: {exc}")
 

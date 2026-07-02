@@ -5,22 +5,25 @@ DemoFoundry exports each slide to a faithful image, writes (or reuses) narration
 and renders the slides as a clean full-screen video — one scene per slide.
 
 !!! info "Requirements (alpha)"
-    Slide export uses **Microsoft PowerPoint** via COM automation, so this path
-    needs **Windows with PowerPoint installed**. A cross-platform path
-    (LibreOffice headless) is planned. Check availability any time:
+    Slide export uses one of two local backends:
+    - **Windows + Microsoft PowerPoint** (COM automation), or
+    - **LibreOffice headless** (`soffice`) + PDF rasterization (`pypdfium2`) on macOS/Linux.
+
+    Check availability any time:
     ```bash
     python -c "from demofoundry.pipeline.pptx_ingest import powerpoint_available as a; print(a())"
     ```
 
 ## 1. Install the extras
 
-The ingester needs `python-pptx` (reads text/notes) and `pywin32` (drives
-PowerPoint). They ship in the `pptx` extra:
+The ingester needs `python-pptx` (reads text/notes), plus either PowerPoint COM
+(`pywin32`, Windows) or the LibreOffice fallback (`pypdfium2`, `pillow`). They
+ship in the `pptx` extra:
 
 ```bash
 pip install "demofoundry[pptx]"
 # or, into an existing checkout:
-pip install python-pptx pywin32
+pip install python-pptx pywin32 pypdfium2 pillow
 ```
 
 ## 2. Ingest the deck

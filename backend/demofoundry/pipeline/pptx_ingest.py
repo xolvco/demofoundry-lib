@@ -12,17 +12,20 @@ Pipeline:
      the same step schema as a web demo, with narration_text the only meaningful
      per-slide field.
 
-Cross-platform note: faithful rasterization here relies on PowerPoint COM. The
-documented post-alpha fallback is LibreOffice headless
-(`soffice --headless --convert-to pdf` then rasterize the PDF), which also runs on
-macOS/Linux without PowerPoint. `powerpoint_available()` lets callers gate the
-feature (e.g. disable the UI button) when PowerPoint isn't present.
+Cross-platform note: this ingester uses two backends:
+  - PowerPoint COM on Windows, when available.
+  - LibreOffice headless (`soffice`) -> PDF -> PNG rasterization for macOS/Linux.
+`powerpoint_available()` lets callers gate the feature when neither backend is
+present.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from .. import config
@@ -31,7 +34,7 @@ from .. import config
 SLIDE_W, SLIDE_H = 1920, 1080
 
 
-def powerpoint_available() -> bool:
+def _windows_powerpoint_available() -> bool:
     """True if PowerPoint COM automation is usable on this machine.
 
     Lightweight: checks the COM registration in the registry rather than
@@ -54,17 +57,28 @@ def powerpoint_available() -> bool:
         return False
 
 
-def export_slides(pptx_path: Path, out_dir: Path) -> list[Path]:
+def _libreoffice_available() -> bool:
+    """True if LibreOffice headless conversion + PDF rasterizer are available."""
+    if not shutil.which("soffice"):
+        return False
+    try:
+        import pypdfium2  # noqa: F401  (presence check)
+    except ImportError:
+        return False
+    return True
+
+
+def powerpoint_available() -> bool:
+    """True if any PPTX slide-export backend is usable on this machine."""
+    return _windows_powerpoint_available() or _libreoffice_available()
+
+
+def _export_slides_windows(pptx_path: Path, out_dir: Path) -> list[Path]:
     """Export every slide to out_dir/slide-NN.png at 1920x1080 via PowerPoint COM.
 
     Safe against a PowerPoint the user already has open: we only close the
     presentation we opened, and only quit the app if we were the ones to start it.
     """
-    if not powerpoint_available():
-        raise RuntimeError(
-            "PowerPoint is required to ingest .pptx files and was not found. "
-            "Install Microsoft PowerPoint, or use the LibreOffice fallback (planned)."
-        )
     import pythoncom
     import win32com.client
 
@@ -95,6 +109,88 @@ def export_slides(pptx_path: Path, out_dir: Path) -> list[Path]:
             app.Quit()
         pythoncom.CoUninitialize()
     return paths
+
+
+def _export_slides_libreoffice(pptx_path: Path, out_dir: Path) -> list[Path]:
+    """Export slides via LibreOffice headless conversion to PDF + rasterization."""
+    if not _libreoffice_available():
+        raise RuntimeError(
+            "LibreOffice path unavailable: install LibreOffice (soffice on PATH) "
+            "and pypdfium2."
+        )
+    import pypdfium2 as pdfium
+
+    pptx_path = Path(pptx_path).resolve()
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("slide-*.png"):
+        old.unlink()
+
+    with tempfile.TemporaryDirectory(prefix="demofoundry-pptx-") as td:
+        td_path = Path(td)
+        cmd = [
+            "soffice",
+            "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--convert-to",
+            "pdf:impress_pdf_Export",
+            "--outdir",
+            str(td_path),
+            str(pptx_path),
+        ]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            detail = (e.stderr or e.stdout or "").strip()
+            raise RuntimeError(f"LibreOffice conversion failed: {detail or e}") from e
+
+        pdf_path = td_path / f"{pptx_path.stem}.pdf"
+        if not pdf_path.exists():
+            pdfs = sorted(td_path.glob("*.pdf"))
+            if not pdfs:
+                raise RuntimeError("LibreOffice did not produce a PDF from the PPTX.")
+            pdf_path = pdfs[0]
+
+        doc = pdfium.PdfDocument(str(pdf_path))
+        paths: list[Path] = []
+        from PIL import Image
+
+        for i in range(len(doc)):
+            page = doc[i]
+            try:
+                width_pt, _ = page.get_size()
+                scale = SLIDE_W / width_pt if width_pt > 0 else 1.0
+                img = page.render(scale=scale).to_pil().convert("RGB")
+            finally:
+                page.close()
+            if img.size != (SLIDE_W, SLIDE_H):
+                fit = min(SLIDE_W / img.width, SLIDE_H / img.height)
+                size = (max(1, int(img.width * fit)), max(1, int(img.height * fit)))
+                fg = img.resize(size)
+                bg = Image.new("RGB", (SLIDE_W, SLIDE_H), (0, 0, 0))
+                bg.paste(fg, ((SLIDE_W - size[0]) // 2, (SLIDE_H - size[1]) // 2))
+                img = bg
+            dest = out_dir / f"slide-{i + 1:02d}.png"
+            img.save(dest, format="PNG")
+            paths.append(dest)
+        doc.close()
+        if not paths:
+            raise RuntimeError("No slide images were generated from the converted PDF.")
+        return paths
+
+
+def export_slides(pptx_path: Path, out_dir: Path) -> list[Path]:
+    """Export every slide to out_dir/slide-NN.png at 1920x1080."""
+    if _windows_powerpoint_available():
+        return _export_slides_windows(pptx_path, out_dir)
+    if _libreoffice_available():
+        return _export_slides_libreoffice(pptx_path, out_dir)
+    raise RuntimeError(
+        "No PPTX export backend available. Install Microsoft PowerPoint (Windows), "
+        "or install LibreOffice (soffice) plus pypdfium2."
+    )
 
 
 def extract_slides(pptx_path: Path) -> list[dict]:

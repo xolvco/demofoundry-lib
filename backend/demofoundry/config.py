@@ -44,3 +44,7 @@ CLAUDE_MODEL = os.environ.get("DEMOFOUNDRY_CLAUDE_MODEL", "claude-opus-4-8")
 #                   starts, giving the viewer a beat to register a new screen.
 VOICE_SPEED = float(os.environ.get("DEMOFOUNDRY_VOICE_SPEED", "0.85"))
 SCENE_LEAD_MS = int(os.environ.get("DEMOFOUNDRY_SCENE_LEAD_MS", "600"))
+
+# Optional CORS allow-list (comma-separated origins). Localhost/127.0.0.1 any
+# port is always allowed by regex in the API app.
+CORS_ALLOW_ORIGINS = os.environ.get("DEMOFOUNDRY_CORS_ALLOW_ORIGINS", "")

@@ -80,12 +80,26 @@ def clone_voice(
 
     if resp.status_code >= 400:
         msg = ""
+        raw = (resp.text or "").strip()
         try:
             body = resp.json()
             if isinstance(body, dict):
-                msg = str(body.get("detail") or body.get("message") or "")
+                detail = body.get("detail")
+                if isinstance(detail, dict):
+                    msg = str(detail.get("message") or detail.get("status") or "")
+                elif detail:
+                    msg = str(detail)
+                if not msg:
+                    msg = str(body.get("message") or "")
         except Exception:
             msg = ""
+        if not msg and raw:
+            msg = raw[:500]
+        if resp.status_code == 401 and not msg:
+            msg = (
+                "Unauthorized by ElevenLabs for /v1/voices/add. "
+                "Check key value and endpoint scope restrictions."
+            )
         detail = msg or f"ElevenLabs clone API returned HTTP {resp.status_code}."
         code = resp.status_code if 400 <= resp.status_code < 500 else 502
         raise VoiceCloneError(code, detail)

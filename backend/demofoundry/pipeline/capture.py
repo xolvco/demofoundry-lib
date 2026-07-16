@@ -25,7 +25,7 @@ VIEWPORT = {"width": 1920, "height": 1080}
 # dead air per typo while authoring. 5s is plenty for an element that exists and
 # fails fast for one that doesn't. Page-load/navigation waits keep their own
 # (longer) budget so genuinely slow apps still settle.
-ACTION_TIMEOUT_MS = 5000
+ACTION_TIMEOUT_MS = 20000
 
 # Dwell after each action settles, before we stamp `ended_at`. Two reasons:
 #   1. A client-side (SPA) nav resolves `networkidle` *before* the new route
